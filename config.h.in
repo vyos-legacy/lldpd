@@ -1,0 +1,446 @@
+/* config.h.in.  Generated from configure.ac by autoheader.  */
+
+/* Cisco Discovery Protocol */
+#undef ENABLE_CDP
+
+/* Dot1 extension (VLAN stuff) */
+#undef ENABLE_DOT1
+
+/* Dot3 extension (PHY stuff) */
+#undef ENABLE_DOT3
+
+/* Extreme Discovery Protocol */
+#undef ENABLE_EDP
+
+/* Foundry Discovery Protocol */
+#undef ENABLE_FDP
+
+/* listen on any VLAN */
+#undef ENABLE_LISTENVLAN
+
+/* LLDP-MED extension */
+#undef ENABLE_LLDPMED
+
+/* SynOptics Network Management Protocol */
+#undef ENABLE_SONMP
+
+/* Define to 1 if you have the <arpa/inet.h> header file. */
+#undef HAVE_ARPA_INET_H
+
+/* Define to 1 if you have the <arpa/nameser.h> header file. */
+#undef HAVE_ARPA_NAMESER_H
+
+/* Define to 1 if you have the `atexit' function. */
+#undef HAVE_ATEXIT
+
+/* Define to 1 if your system has a working `chown' function. */
+#undef HAVE_CHOWN
+
+/* Define to 1 if you have the declaration of `ETHERTYPE_VLAN', and to 0 if
+   you don't. */
+#undef HAVE_DECL_ETHERTYPE_VLAN
+
+/* Define to 1 if you have the declaration of `PACKET_ORIGDEV', and to 0 if
+   you don't. */
+#undef HAVE_DECL_PACKET_ORIGDEV
+
+/* Define to 1 if you have the declaration of `ADVERTISED_10000baseT_Full',
+   and to 0 if you don't. */
+#undef HAVE_DECL___ADVERTISED_10000BASET_FULL
+
+/* Define to 1 if you have the declaration of `ADVERTISED_2500baseX_Full', and
+   to 0 if you don't. */
+#undef HAVE_DECL___ADVERTISED_2500BASEX_FULL
+
+/* Define to 1 if you have the declaration of `ADVERTISED_Asym_Pause', and to
+   0 if you don't. */
+#undef HAVE_DECL___ADVERTISED_ASYM_PAUSE
+
+/* Define to 1 if you have the declaration of `ADVERTISED_Pause', and to 0 if
+   you don't. */
+#undef HAVE_DECL___ADVERTISED_PAUSE
+
+/* Define to 1 if you have the declaration of `GET_VLAN_REALDEV_NAME_CMD', and
+   to 0 if you don't. */
+#undef HAVE_DECL___GET_VLAN_REALDEV_NAME_CMD
+
+/* Define to 1 if you have the declaration of `GET_VLAN_VID_CMD ', and to 0 if
+   you don't. */
+#undef HAVE_DECL___GET_VLAN_VID_CMD___
+
+/* Define to 1 if you have the declaration of `SIOCBONDINFOQUERY', and to 0 if
+   you don't. */
+#undef HAVE_DECL___SIOCBONDINFOQUERY
+
+/* Define to 1 if you have the declaration of `SIOCBONDSLAVEINFOQUERY ', and
+   to 0 if you don't. */
+#undef HAVE_DECL___SIOCBONDSLAVEINFOQUERY___
+
+/* Define to 1 if you have the declaration of `SIOCGIFVLAN', and to 0 if you
+   don't. */
+#undef HAVE_DECL___SIOCGIFVLAN
+
+/* Define to 1 if you have the declaration of `SLIST_EMPTY ', and to 0 if you
+   don't. */
+#undef HAVE_DECL___SLIST_EMPTY___
+
+/* Define to 1 if you have the declaration of `SLIST_ENTRY', and to 0 if you
+   don't. */
+#undef HAVE_DECL___SLIST_ENTRY
+
+/* Define to 1 if you have the declaration of `SLIST_FIRST', and to 0 if you
+   don't. */
+#undef HAVE_DECL___SLIST_FIRST
+
+/* Define to 1 if you have the declaration of `SLIST_HEAD', and to 0 if you
+   don't. */
+#undef HAVE_DECL___SLIST_HEAD
+
+/* Define to 1 if you have the declaration of `SLIST_INIT', and to 0 if you
+   don't. */
+#undef HAVE_DECL___SLIST_INIT
+
+/* Define to 1 if you have the declaration of `SLIST_INSERT_HEAD', and to 0 if
+   you don't. */
+#undef HAVE_DECL___SLIST_INSERT_HEAD
+
+/* Define to 1 if you have the declaration of `SLIST_NEXT', and to 0 if you
+   don't. */
+#undef HAVE_DECL___SLIST_NEXT
+
+/* Define to 1 if you have the declaration of `SLIST_REMOVE_HEAD', and to 0 if
+   you don't. */
+#undef HAVE_DECL___SLIST_REMOVE_HEAD
+
+/* Define to 1 if you have the declaration of `SPEED_10000 ', and to 0 if you
+   don't. */
+#undef HAVE_DECL___SPEED_10000___
+
+/* Define to 1 if you have the declaration of `TAILQ_EMPTY', and to 0 if you
+   don't. */
+#undef HAVE_DECL___TAILQ_EMPTY
+
+/* Define to 1 if you have the declaration of `TAILQ_FIRST', and to 0 if you
+   don't. */
+#undef HAVE_DECL___TAILQ_FIRST
+
+/* Define to 1 if you have the declaration of `TAILQ_FOREACH', and to 0 if you
+   don't. */
+#undef HAVE_DECL___TAILQ_FOREACH
+
+/* Define to 1 if you have the declaration of `TAILQ_NEXT', and to 0 if you
+   don't. */
+#undef HAVE_DECL___TAILQ_NEXT
+
+/* Define to 1 if you have the <dlfcn.h> header file. */
+#undef HAVE_DLFCN_H
+
+/* Define to 1 if you have the <linux/ethtool.h> header file. */
+#undef HAVE_ETHTOOL_H
+
+/* Define to 1 if you have the <fcntl.h> header file. */
+#undef HAVE_FCNTL_H
+
+/* Define to 1 if you have the `fork' function. */
+#undef HAVE_FORK
+
+/* Define to 1 if you have the `gethostbyname' function. */
+#undef HAVE_GETHOSTBYNAME
+
+/* Define to 1 if you have the `getifaddrs' function. */
+#undef HAVE_GETIFADDRS
+
+/* Define to 1 if `num_slaves' is a member of `ifbond'. */
+#undef HAVE_IFBOND_NUM_SLAVES
+
+/* Define to 1 if `slave_name' is a member of `ifslave'. */
+#undef HAVE_IFSLAVE_SLAVE_NAME
+
+/* Define to 1 if you have the `inet_ntoa' function. */
+#undef HAVE_INET_NTOA
+
+/* Define to 1 if you have the <inttypes.h> header file. */
+#undef HAVE_INTTYPES_H
+
+/* Define to 1 if you have the `netsnmp' library (-lnetsnmp). */
+#undef HAVE_LIBNETSNMP
+
+/* Define to 1 if you have the `xml2' library (-lxml2). */
+#undef HAVE_LIBXML2
+
+/* Define to 1 if you have the <linux/filter.h> header file. */
+#undef HAVE_LINUX_FILTER_H
+
+/* Define to 1 if you have the <linux/if_bonding.h> header file. */
+#undef HAVE_LINUX_IF_BONDING_H
+
+/* Define to 1 if you have the <linux/if_bridge.h> header file. */
+#undef HAVE_LINUX_IF_BRIDGE_H
+
+/* Define to 1 if you have the <linux/if_packet.h> header file. */
+#undef HAVE_LINUX_IF_PACKET_H
+
+/* Define to 1 if you have the <linux/if_vlan.h> header file. */
+#undef HAVE_LINUX_IF_VLAN_H
+
+/* Define to 1 if you have the <linux/sockios.h> header file. */
+#undef HAVE_LINUX_SOCKIOS_H
+
+/* Define to 1 if you have the <linux/wireless.h> header file. */
+#undef HAVE_LINUX_WIRELESS_H
+
+/* Define to 1 if your system has a GNU libc compatible `malloc' function, and
+   to 0 otherwise. */
+#undef HAVE_MALLOC
+
+/* Define to 1 if you have the <malloc.h> header file. */
+#undef HAVE_MALLOC_H
+
+/* Define to 1 if you have the <memory.h> header file. */
+#undef HAVE_MEMORY_H
+
+/* Define to 1 if you have the `memset' function. */
+#undef HAVE_MEMSET
+
+/* Define to 1 if you have the <netdb.h> header file. */
+#undef HAVE_NETDB_H
+
+/* Define to 1 if you have the <netinet/in.h> header file. */
+#undef HAVE_NETINET_IN_H
+
+/* Define to 1 if `f_create_from_tstring_new' is a member of
+   `netsnmp_tdomain'. */
+#undef HAVE_NETSNMP_TDOMAIN_F_CREATE_FROM_TSTRING_NEW
+
+/* Define to 1 if you have the <net/if.h> header file. */
+#undef HAVE_NET_IF_H
+
+/* Define to 1 if your system has a GNU libc compatible `realloc' function,
+   and to 0 otherwise. */
+#undef HAVE_REALLOC
+
+/* Define to 1 if you have the `regcomp' function. */
+#undef HAVE_REGCOMP
+
+/* Define to 1 if you have the <resolv.h> header file. */
+#undef HAVE_RESOLV_H
+
+/* Define to 1 if you have the `select' function. */
+#undef HAVE_SELECT
+
+/* Define to 1 if you have the `setenv' function. */
+#undef HAVE_SETENV
+
+/* Define to 1 if you have the `socket' function. */
+#undef HAVE_SOCKET
+
+/* Define to 1 if you have the <stdint.h> header file. */
+#undef HAVE_STDINT_H
+
+/* Define to 1 if you have the <stdlib.h> header file. */
+#undef HAVE_STDLIB_H
+
+/* Define to 1 if you have the `strchr' function. */
+#undef HAVE_STRCHR
+
+/* Define to 1 if you have the `strdup' function. */
+#undef HAVE_STRDUP
+
+/* Define to 1 if you have the `strerror' function. */
+#undef HAVE_STRERROR
+
+/* Define to 1 if you have the <strings.h> header file. */
+#undef HAVE_STRINGS_H
+
+/* Define to 1 if you have the <string.h> header file. */
+#undef HAVE_STRING_H
+
+/* Define to 1 if you have the `strlcpy' function. */
+#undef HAVE_STRLCPY
+
+/* Define to 1 if you have the `strndup' function. */
+#undef HAVE_STRNDUP
+
+/* Define to 1 if you have the <syslog.h> header file. */
+#undef HAVE_SYSLOG_H
+
+/* Define to 1 if you have the <sys/ioctl.h> header file. */
+#undef HAVE_SYS_IOCTL_H
+
+/* Define to 1 if you have the <sys/param.h> header file. */
+#undef HAVE_SYS_PARAM_H
+
+/* Define to 1 if you have the <sys/queue.h> header file. */
+#undef HAVE_SYS_QUEUE_H
+
+/* Define to 1 if you have the <sys/socket.h> header file. */
+#undef HAVE_SYS_SOCKET_H
+
+/* Define to 1 if you have the <sys/stat.h> header file. */
+#undef HAVE_SYS_STAT_H
+
+/* Define to 1 if you have the <sys/time.h> header file. */
+#undef HAVE_SYS_TIME_H
+
+/* Define to 1 if you have the <sys/types.h> header file. */
+#undef HAVE_SYS_TYPES_H
+
+/* Define to 1 if you have the `tzset' function. */
+#undef HAVE_TZSET
+
+/* Define to 1 if you have the `uname' function. */
+#undef HAVE_UNAME
+
+/* Define to 1 if you have the <unistd.h> header file. */
+#undef HAVE_UNISTD_H
+
+/* Define to 1 if you have the `vfork' function. */
+#undef HAVE_VFORK
+
+/* Define to 1 if you have the <vfork.h> header file. */
+#undef HAVE_VFORK_H
+
+/* Define to 1 if `fork' works. */
+#undef HAVE_WORKING_FORK
+
+/* Define to 1 if `vfork' works. */
+#undef HAVE_WORKING_VFORK
+
+/* Define if libc defines __progname */
+#undef HAVE___PROGNAME
+
+/* FD_SETSIZE for select() */
+#undef LLDPD_FD_SETSIZE
+
+/* Define to the sub-directory in which libtool stores uninstalled libraries.
+   */
+#undef LT_OBJDIR
+
+/* Define to 1 if your C compiler doesn't accept -c and -o together. */
+#undef NO_MINUS_C_MINUS_O
+
+/* Name of package */
+#undef PACKAGE
+
+/* Define to the address where bug reports for this package should be sent. */
+#undef PACKAGE_BUGREPORT
+
+/* Define to the full name of this package. */
+#undef PACKAGE_NAME
+
+/* Define to the full name and version of this package. */
+#undef PACKAGE_STRING
+
+/* Define to the one symbol short name of this package. */
+#undef PACKAGE_TARNAME
+
+/* Define to the home page for this package. */
+#undef PACKAGE_URL
+
+/* Define to the version of this package. */
+#undef PACKAGE_VERSION
+
+/* Which directory to use to chroot lldpd */
+#undef PRIVSEP_CHROOT
+
+/* Which group to use for privilege separation */
+#undef PRIVSEP_GROUP
+
+/* Which user to use for privilege separation */
+#undef PRIVSEP_USER
+
+/* Define to 1 if you have the ANSI C header files. */
+#undef STDC_HEADERS
+
+/* Define to indicate to enable SNMP support */
+#undef USE_SNMP
+
+/* Define to indicate to enable XML support */
+#undef USE_XML
+
+/* Version number of package */
+#undef VERSION
+
+/* Define for Solaris 2.5.1 so the uint32_t typedef from <sys/synch.h>,
+   <pthread.h>, or <semaphore.h> is not used. If the typedef were allowed, the
+   #define below would cause a syntax error. */
+#undef _UINT32_T
+
+/* Define for Solaris 2.5.1 so the uint8_t typedef from <sys/synch.h>,
+   <pthread.h>, or <semaphore.h> is not used. If the typedef were allowed, the
+   #define below would cause a syntax error. */
+#undef _UINT8_T
+
+/* Define to `int' if <sys/types.h> doesn't define. */
+#undef gid_t
+
+/* Define to `__inline__' or `__inline' if that's what the C compiler
+   calls it, or to nothing if 'inline' is not supported under any name.  */
+#ifndef __cplusplus
+#undef inline
+#endif
+
+/* Define to the type of a signed integer type of width exactly 16 bits if
+   such a type exists and the standard includes do not define it. */
+#undef int16_t
+
+/* Define to the type of a signed integer type of width exactly 32 bits if
+   such a type exists and the standard includes do not define it. */
+#undef int32_t
+
+/* Define to rpl_malloc if the replacement function should be used. */
+#undef malloc
+
+/* Define to `int' if <sys/types.h> does not define. */
+#undef pid_t
+
+/* Define to rpl_realloc if the replacement function should be used. */
+#undef realloc
+
+/* Define to the type u16 should expand to. */
+#undef s16
+
+/* Define to the type u32 should expand to. */
+#undef s32
+
+/* Define to the type u64 should expand to. */
+#undef s64
+
+/* Define to the type u8 should expand to. */
+#undef s8
+
+/* Define to `unsigned int' if <sys/types.h> does not define. */
+#undef size_t
+
+/* Define to `int' if <sys/types.h> does not define. */
+#undef ssize_t
+
+/* Define to the type u16 should expand to. */
+#undef u16
+
+/* Define to the type u32 should expand to. */
+#undef u32
+
+/* Define to the type u64 should expand to. */
+#undef u64
+
+/* Define to the type u8 should expand to. */
+#undef u8
+
+/* Define to `int' if <sys/types.h> doesn't define. */
+#undef uid_t
+
+/* Define to the type of an unsigned integer type of width exactly 16 bits if
+   such a type exists and the standard includes do not define it. */
+#undef uint16_t
+
+/* Define to the type of an unsigned integer type of width exactly 32 bits if
+   such a type exists and the standard includes do not define it. */
+#undef uint32_t
+
+/* Define to the type of an unsigned integer type of width exactly 8 bits if
+   such a type exists and the standard includes do not define it. */
+#undef uint8_t
+
+/* Define as `fork' if `vfork' does not work. */
+#undef vfork

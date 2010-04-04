@@ -1,0 +1,73 @@
+lldpd (0.5.0)
+
+  * Features:
+    + lldpd can now handle several systems on the same port. This
+      modification also allows to speak to a switch using CDP and LLDP
+      for example.
+    + The way that lldpd gathers information for each port has been
+      abstracted. This should allow to support more systems (BSD for
+      examples) or switch cores in the future. Sending/receive support
+      is also abstracted.
+    + Add "-k" switch to avoid to emit too much information on running
+      kernel.
+    + Support of ifAlias with kernel >= 2.6.28
+    + Lot of portability stuff. lldpd can now be compiled on RHEL
+      2.1. Still Linux-only though.
+    + Add an option to specify AgentX socket (-X).
+    + Add some unit tests
+    + lldpctl has been reworked; it is now able to output data in XML
+      format for easier parsing. Patches were provided by Andreas
+      Hofmeister.
+
+  * Bug fixes:
+    + Fix EDP VLAN handling
+    + Silent warnings about bridge stuff.
+    + Copy /etc/localtime into chroot before starting lldpd daemon to
+      ensure correct timestamps for logs.
+
+lldpd (0.4.1)
+
+  * Fix EDP handling when there is no VLAN
+  * Fix CDP version to not always be 1
+  * Misc fix:
+     + incorrect number of arguments for a LLOG_INFO call
+     + fix SNMP last change in case this change occurs before start time
+
+lldpd (0.4)
+
+  * Rewrite of packet builder and parser to be able to cope with
+    architecture that cannot do unaligned read. For decoder, we don't
+    cast structures any more since they can be unaligned. For encoder,
+    we use memcpy through the use of macro that build packets step by
+    step.
+
+lldpd (0.3.2)
+
+  * Fix LLDP-MED support
+
+lldpd (0.3.1)
+
+  * Misc fixes, including memory leaks
+
+lldpd (0.3)
+
+  * Initial support of LLDP-MED
+  * Fix for bridge detection (don't send bridge ioctl on random interfaces)
+  * For bonded devices, get the real hardware address. For inactive
+    slaves, transmit using a random MAC address.
+
+lldpd (0.2.1)
+
+  * Fix a syntax error in manual page
+  * Fix open() calls
+
+lldpd (0.2)
+
+  * Add privilege separation
+  * Add FDP support
+  * Support CDP encapsulated into native VLAN
+  * Various fixes
+
+lldpd (0.1)
+
+  * Initial release
