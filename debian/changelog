@@ -1,4 +1,4 @@
-lldp (0.5.0+vyatta+1) unstable; urgency=low
+lldpd (0.5.0+vyatta+1) unstable; urgency=low
 
   * Initial Release.
 
