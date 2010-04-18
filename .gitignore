@@ -9,7 +9,6 @@
 .*.swp
 TAGS
 ID
-/aclocal.m4
 /autom4te.cache
 /build-stamp
 /config
