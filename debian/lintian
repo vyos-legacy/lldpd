@@ -1,2 +1,4 @@
 lldpd: file-in-unusual-dir
 lldpd: dir-or-file-in-opt
+lldpctl: file-in-unusual-dir
+lldpctl: dir-or-file-in-opt
