@@ -22,8 +22,6 @@ ID
 /libtool
 /stamp-h1
 /debian/files
-/debian/linda
-/debian/lintian
 /debian/lldpd
 /debian/*.log
 /debian/*.debhelper
