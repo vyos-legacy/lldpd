@@ -23,7 +23,7 @@ CFLAGS = -Wall -g
 configure	 = ./configure
 configure	+= --host=$(DEB_HOST_GNU_TYPE)
 configure	+= --build=$(DEB_BUILD_GNU_TYPE)
-configure	+= --prefix=/opt/vyatta
+configure	+= --prefix=/usr
 configure	+= --mandir=\$${prefix}/share/man
 configure	+= --infodir=\$${prefix}/share/info
 configure	+= CFLAGS="$(CFLAGS)"
