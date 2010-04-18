@@ -7,9 +7,9 @@
 # This special exception was added by Craig Small in version 0.37 of dh-make.
 
 # Uncomment this to turn on verbose mode.
-export DH_VERBOSE=1
+#export DH_VERBOSE=1
 
-#export DEB_BUILD_HARDENING=1
+export DEB_BUILD_HARDENING=1
 
 # These are used for cross-compiling and for saving the configure script
 # from having to guess our platform (since we know it already)
@@ -56,7 +56,7 @@ build-stamp:  config.status
 	touch Makefile.in
 	touch configure
 	dh_testdir
-	$(MAKE) -d
+	$(MAKE)
 	touch $@
 
 clean: clean-patched

@@ -12,6 +12,7 @@ ID
 /autom4te.cache
 /build-stamp
 /config
+/config.h
 /config.log
 /config.guess
 /config.status
