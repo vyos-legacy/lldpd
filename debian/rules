@@ -50,6 +50,11 @@ config.status: configure
 build: build-stamp
 
 build-stamp:  config.status
+	touch configure.ac
+	touch aclocal.m4
+	touch config.h.in
+	touch Makefile.in
+	touch configure
 	dh_testdir
 	$(MAKE) -d
 	touch $@
