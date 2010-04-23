@@ -18,7 +18,6 @@ ID
 /config.status
 /config.sub
 /config.cache
-/configure
 /libtool
 /stamp-h1
 /debian/files
@@ -28,12 +27,7 @@ ID
 /debian/stamp-autotools-files
 /Makefile
 /src/Makefile
-/m4
-/man/Makefile.in
 /man/Makefile
 /src/lldpctl
 /src/lldpd
-/src/Makefile.in
-/src/config.h.in
-/tests/Makefile.in
 /tests/Makefile
