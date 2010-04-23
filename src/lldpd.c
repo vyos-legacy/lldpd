@@ -640,14 +640,22 @@ lldpd_update_localchassis(struct lldpd *cfg)
 	free(LOCAL_CHASSIS(cfg)->c_descr);
 	if ((LOCAL_CHASSIS(cfg)->c_name = strdup(hp)) == NULL)
 		fatal(NULL);
-	if (cfg->g_advertise_version) {
-		if (asprintf(&LOCAL_CHASSIS(cfg)->c_descr, "%s %s %s %s",
-			un.sysname, un.release, un.version, un.machine) == -1)
+        if (cfg->g_descr_override) {
+                if (asprintf(&LOCAL_CHASSIS(cfg)->c_descr, "%s",
+			cfg->g_descr_override) == -1)
 			fatal("failed to set full system description");
-	} else {
-		if (asprintf(&LOCAL_CHASSIS(cfg)->c_descr, "%s", un.sysname) == -1)
-			fatal("failed to set minimal system description");
-	}
+        } else {
+	        if (cfg->g_advertise_version) {
+		        if (asprintf(&LOCAL_CHASSIS(cfg)->c_descr, "%s %s %s %s",
+			        un.sysname, un.release, un.version, un.machine) 
+                                == -1)
+			        fatal("failed to set full system description");
+	        } else {
+		        if (asprintf(&LOCAL_CHASSIS(cfg)->c_descr, "%s", 
+                                un.sysname) == -1)
+			        fatal("failed to set minimal system description");
+	        }
+        }
 
 	/* Check forwarding */
 	if ((f = priv_open("/proc/sys/net/ipv4/ip_forward")) >= 0) {
@@ -780,7 +788,7 @@ lldpd_main(int argc, char *argv[])
 #ifdef ENABLE_LISTENVLAN
 		"v"
 #endif
-		"kdxX:m:p:M:i@                    ";
+		"kdxX:m:p:M:S:i@                    ";
 	int i, found, advertise_version = 1;
 #ifdef ENABLE_LISTENVLAN
 	int vlan = 0;
@@ -788,6 +796,7 @@ lldpd_main(int argc, char *argv[])
 #ifdef ENABLE_LLDPMED
 	int lldpmed = 0, noinventory = 0;
 #endif
+        char *descr_override = NULL;
 
 	saved_argv = argv;
 
@@ -850,6 +859,9 @@ lldpd_main(int argc, char *argv[])
 			usage();
 #endif
 			break;
+                case 'S':
+                        descr_override = strdup(optarg);
+                        break;
 		default:
 			found = 0;
 			for (i=0; protos[i].mode != 0; i++) {
@@ -899,6 +911,9 @@ lldpd_main(int argc, char *argv[])
 	if ((cfg->g_sock = socket(AF_INET, SOCK_DGRAM, 0)) == -1)
 		fatal("failed to get ioctl socket");
 	cfg->g_delay = LLDPD_TX_DELAY;
+
+        if (descr_override)
+           cfg->g_descr_override = descr_override;
 
 	/* Set system capabilities */
 	if ((lchassis = (struct lldpd_chassis*)
