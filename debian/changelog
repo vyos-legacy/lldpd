@@ -1,3 +1,10 @@
+lldpd (0.5.0+vyatta+3) unstable; urgency=low
+
+  * check in generated files to avoid unsupported automake
+  * update .gitignore file
+
+ -- Stig Thormodsrud <stig@vyatta.com>  Fri, 23 Apr 2010 16:17:25 -0700
+
 lldpd (0.5.0+vyatta+2) unstable; urgency=low
 
   * UNRELEASED
