@@ -27,9 +27,17 @@ configure	+= --prefix=/usr
 configure	+= --mandir=\$${prefix}/share/man
 configure	+= --infodir=\$${prefix}/share/info
 configure	+= CFLAGS="$(CFLAGS)"
+configure       += --enable-cdp
+configure       += --enable-fdp
+configure       += --enable-edp
+configure       += --enable-sonmp
+configure       += --enable-lldpmed
+configure       += --enable-dot1
+configure       += --enable-dot3
+configure       += --enable-listenvlan
 configure       += --with-snmp
 configure       += --with-xml
-configure       += --enable-listenvlan
+configure       += --with-pic
 
 
 ifneq (,$(findstring noopt,$(DEB_BUILD_OPTIONS)))
