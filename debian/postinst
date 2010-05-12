@@ -14,6 +14,8 @@ for i in /usr/sbin/lldpctl; do
   fi
 done
 
+chown root:root /usr/sbin/lldpctl
+
 #DEBHELPER#
 
 exit 0
