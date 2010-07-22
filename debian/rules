@@ -18,7 +18,7 @@ DEB_BUILD_GNU_TYPE  ?= $(shell dpkg-architecture -qDEB_BUILD_GNU_TYPE)
 PACKAGE=lldpd
 PKGDIR=$(CURDIR)/debian/$(PACKAGE)
 
-CFLAGS = -Wall -g 
+CFLAGS = -Wall -g -D SYSFS_BRIDGE_FDB
 
 configure	 = ./configure
 configure	+= --host=$(DEB_HOST_GNU_TYPE)
