@@ -1,3 +1,13 @@
+lldpd (0.5.0+vyatta+6) unstable; urgency=low
+
+  [ Vincent Bernat ]
+  * Patch to keep wifi and bridge cap when updating chassis.
+
+  [ Stig Thormodsrud ]
+  * Enable define for bridge check.
+
+ -- Stig Thormodsrud <stig@vyatta.com>  Thu, 22 Jul 2010 17:00:03 -0700
+
 lldpd (0.5.0+vyatta+5) unstable; urgency=low
 
   * Change owner of lldpctl in postinst.
