@@ -1,3 +1,9 @@
+lldpd (0.5.0+vyatta+7) unstable; urgency=low
+
+  * UNRELEASED
+
+ -- An-Cheng Huang <ancheng@vyatta.com>  Thu, 22 Jul 2010 17:21:36 -0700
+
 lldpd (0.5.0+vyatta+6) unstable; urgency=low
 
   [ Vincent Bernat ]
