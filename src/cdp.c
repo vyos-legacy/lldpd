@@ -153,7 +153,7 @@ cdp_send(struct lldpd *global,
 	/* Platform */
 	if (!(
 	      POKE_START_CDP_TLV(CDP_TLV_PLATFORM) &&
-	      POKE_BYTES("Linux", strlen("Linux")) &&
+	      POKE_BYTES("Vyatta Router", strlen("Vyatta Router")) &&
 	      POKE_END_CDP_TLV))
 		goto toobig;
 	POKE_SAVE(end);
