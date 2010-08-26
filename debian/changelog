@@ -1,3 +1,9 @@
+lldpd (0.5.0+vyatta+8) unstable; urgency=low
+
+  * Fix 5735 Hardcode vyatta for now.
+
+ -- Stig Thormodsrud <stig@vyatta.com>  Thu, 26 Aug 2010 16:46:48 -0700
+
 lldpd (0.5.0+vyatta+7) unstable; urgency=low
 
   * UNRELEASED
