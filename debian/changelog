@@ -1,3 +1,9 @@
+lldpd (0.5.0+vyatta+10) unstable; urgency=low
+
+  * rebuild to link with new libsnmp
+
+ -- An-Cheng Huang <ancheng@vyatta.com>  Fri, 03 Sep 2010 15:52:29 -0700
+
 lldpd (0.5.0+vyatta+9) unstable; urgency=low
 
   * Remove usage of common_funcs.h in snmplib
