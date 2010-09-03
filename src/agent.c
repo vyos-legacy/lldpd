@@ -20,7 +20,6 @@
 #include <net-snmp/net-snmp-includes.h>
 #include <net-snmp/agent/net-snmp-agent-includes.h>
 #include <net-snmp/agent/snmp_vars.h>
-#include <net-snmp/agent/util_funcs.h>
 
 static oid lldp_oid[] = {1, 0, 8802, 1, 1, 2};
 
