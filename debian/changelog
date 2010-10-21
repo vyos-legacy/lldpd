@@ -1,3 +1,9 @@
+lldpd (0.5.0+vyatta+11) unstable; urgency=low
+
+  * Fix build warning
+
+ -- Stephen Hemminger <stephen.hemminger@vyatta.com>  Wed, 20 Oct 2010 17:18:00 -0700
+
 lldpd (0.5.0+vyatta+10) unstable; urgency=low
 
   * rebuild to link with new libsnmp
