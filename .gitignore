@@ -24,6 +24,7 @@ ID
 /debian/lldpd
 /debian/*.log
 /debian/*.debhelper
+/debian/*.substvars
 /debian/stamp-autotools-files
 /Makefile
 /src/Makefile
