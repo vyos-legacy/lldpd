@@ -1,3 +1,9 @@
+lldpd (0.5.0+vyatta+16) unstable; urgency=low
+
+  * Silence warning about trying to send to down network
+
+ -- Stephen Hemminger <shemminger@vyatta.com>  Thu, 18 Aug 2011 15:50:08 -0700
+
 lldpd (0.5.0+vyatta+15) unstable; urgency=low
 
   * force rebuild with later snmp
