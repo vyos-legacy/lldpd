@@ -267,7 +267,7 @@ lldp_send(struct lldpd *global,
 
 	if (hardware->h_ops->send(global, hardware,
 		(char *)packet, pos - packet) == -1) {
-		LLOG_WARN("unable to send packet on real device for %s",
+		LLOG_DEBUG("unable to send packet on real device for %s",
 		    hardware->h_ifname);
 		free(packet);
 		return ENETDOWN;
