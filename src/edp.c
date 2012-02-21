@@ -475,7 +475,7 @@ edp_decode(struct lldpd *cfg, char *frame, int s,
 		if (gotvlans)
 			goto malformed;
 #endif
-		LLOG_WARNX("some mandatory tlv are missing for frame received on %s",
+		LLOG_DEBUG("some mandatory tlv are missing for frame received on %s",
 		    hardware->h_ifname);
 		goto malformed;
 	}

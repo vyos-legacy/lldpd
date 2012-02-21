@@ -753,7 +753,7 @@ lldp_decode(struct lldpd *cfg, char *frame, int s,
 	    (port->p_id == NULL) ||
 	    (chassis->c_ttl == 0) ||
 	    (gotend == 0)) {
-		LLOG_WARNX("some mandatory tlv are missing for frame received on %s",
+		LLOG_DEBUG("some mandatory tlv are missing for frame received on %s",
 		    hardware->h_ifname);
 		goto malformed;
 	}

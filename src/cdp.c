@@ -455,7 +455,7 @@ cdp_decode(struct lldpd *cfg, char *frame, int s,
 	    (port->p_descr == NULL) ||
 	    (chassis->c_ttl == 0) ||
 	    (chassis->c_cap_enabled == 0)) {
-		LLOG_WARNX("some mandatory CDP/FDP tlv are missing for frame received on %s",
+		LLOG_DEBUG("some mandatory CDP/FDP tlv are missing for frame received on %s",
 		    hardware->h_ifname);
 		goto malformed;
 	}
