@@ -448,11 +448,24 @@ cdp_decode(struct lldpd *cfg, char *frame, int s,
 		memcpy(chassis->c_descr + platform_len + strlen(CONCAT_PLATFORM),
 		    software, software_len);
 	}
+
+        /* workaround bug in some cdp implimentations that don't include port */
+        if ((port->p_descr == NULL) || (port->p_id == NULL)) {
+		if ((port->p_descr = strdup("unknown")) == NULL) {
+			LLOG_WARN("unable to allocate memory for port description");
+			goto malformed;
+		}
+		port->p_id_subtype = LLDP_PORTID_SUBTYPE_IFNAME;
+		if ((port->p_id = strdup("unknown")) == NULL) {
+			LLOG_WARN("unable to allocate memory for port ID");
+			goto malformed;
+		}
+		port->p_id_len = strlen(port->p_id);
+        }
+
 	if ((chassis->c_id == NULL) ||
-	    (port->p_id == NULL) ||
 	    (chassis->c_name == NULL) ||
 	    (chassis->c_descr == NULL) ||
-	    (port->p_descr == NULL) ||
 	    (chassis->c_ttl == 0) ||
 	    (chassis->c_cap_enabled == 0)) {
 		LLOG_DEBUG("some mandatory CDP/FDP tlv are missing for frame received on %s",
