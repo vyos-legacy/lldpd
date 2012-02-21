@@ -1,3 +1,9 @@
+lldpd (0.5.0+vyatta+19) unstable; urgency=low
+
+  * Revert "Include snmp util to get header prototypes"
+
+ -- Stephen Hemminger <shemminger@vyatta.com>  Tue, 21 Feb 2012 13:30:30 -0800
+
 lldpd (0.5.0+vyatta+18) unstable; urgency=low
 
   * Workaround buggy CDP implementations
