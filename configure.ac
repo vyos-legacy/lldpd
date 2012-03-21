@@ -6,7 +6,14 @@
 
 # Configure autoconf
 AC_PREREQ([2.64])
-AC_INIT([lldpd], [0.5.0], [bernat@luffy.cx])
+
+dnl Use something like this if you need to patch autoconf files and
+dnl regenerate configure outside upstream git tree:
+dnl AC_INIT([lldpd], [0.5.7], [bernat@luffy.cx])
+AC_INIT([lldpd],
+        [m4_esyscmd_s([git describe --tags --always 2> /dev/null || date +%F])],
+        [bernat@luffy.cx])
+
 AC_CONFIG_SRCDIR([src/lldpd.c])
 AC_CONFIG_HEADER([config.h])
 AC_CONFIG_FILES([Makefile src/Makefile man/Makefile tests/Makefile])
@@ -14,7 +21,8 @@ AC_CONFIG_MACRO_DIR([m4])
 
 # Configure automake
 AM_INIT_AUTOMAKE([foreign -Wall -Werror])
-AM_SILENT_RULES([yes])
+AM_MAINTAINER_MODE
+m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES(yes)])
 
 # Configure libtool
 #LT_PREREQ([2.2])
@@ -49,6 +57,8 @@ AX_CFLAGS_GCC_OPTION([-fstack-protector])
 AX_CFLAGS_GCC_OPTION([-D_FORTIFY_SOURCE=2])
 AX_CFLAGS_GCC_OPTION([-Wno-unused-parameter])
 AX_CFLAGS_GCC_OPTION([-Wno-sign-compare]) dnl Should be fixed later
+AX_LDFLAGS_OPTION([-Wl,-z,relro])
+AX_LDFLAGS_OPTION([-Wl,-z,now])
 
 AC_CACHE_SAVE
 
@@ -96,27 +106,25 @@ AC_CHECK_HEADERS([ \
 AC_CACHE_SAVE
 
 # Check for sys/queue.h completeness, missing bits will be in compat.h
-AC_CHECK_DECLS([ \
-TAILQ_FIRST, \
-TAILQ_NEXT, \
-TAILQ_FOREACH, \
-TAILQ_EMPTY, \
-SLIST_HEAD, \
-SLIST_ENTRY, \
-SLIST_INIT, \
-SLIST_INSERT_HEAD, \
-SLIST_FIRST, \
-SLIST_NEXT, \
-SLIST_REMOVE_HEAD, \
-SLIST_EMPTY \
-],[],[],[[@%:@include <sys/queue.h>]])
+AC_CHECK_DECLS([
+TAILQ_FIRST,
+TAILQ_NEXT,
+TAILQ_FOREACH,
+TAILQ_EMPTY,
+SLIST_HEAD,
+SLIST_ENTRY,
+SLIST_INIT,
+SLIST_INSERT_HEAD,
+SLIST_FIRST,
+SLIST_NEXT,
+SLIST_REMOVE_HEAD,
+SLIST_EMPTY],[],[],[[@%:@include <sys/queue.h>]])
 
 # On some systems, some ioctl are not declared
-AC_CHECK_DECLS([ \
-SIOCGIFVLAN, \
-SIOCBONDINFOQUERY, \
-SIOCBONDSLAVEINFOQUERY \
-],[],[],[[@%:@include <linux/sockios.h>]])
+AC_CHECK_DECLS([
+SIOCGIFVLAN,
+SIOCBONDINFOQUERY,
+SIOCBONDSLAVEINFOQUERY],[],[],[[@%:@include <linux/sockios.h>]])
 AC_CHECK_MEMBERS([ifslave.slave_name, ifbond.num_slaves], [],
    [AC_MSG_ERROR([linux/if_bonding.h is incomplete. See README file.])],
    [
@@ -130,22 +138,19 @@ AC_CHECK_DECLS([PACKET_ORIGDEV],[],[],[[@%:@include <linux/if_packet.h>]])
 
 # Check for ethtool stuff
 lldp_CHECK_HEADER_ETHTOOL
-AC_CHECK_DECLS([ \
-ADVERTISED_2500baseX_Full, \
-ADVERTISED_Pause, \
-ADVERTISED_Asym_Pause, \
-ADVERTISED_10000baseT_Full, \
-SPEED_10000 \
-],[],[],[[@%:@include <linux/ethtool.h>]])
+AC_CHECK_DECLS([
+ADVERTISED_2500baseX_Full,
+ADVERTISED_Pause,
+ADVERTISED_Asym_Pause,
+ADVERTISED_10000baseT_Full,
+SPEED_10000],[],[],[[@%:@include <linux/ethtool.h>]])
 
 # Check for ETHERTYPE_VLAN, put it in compat.h if not defined
 AC_CHECK_DECLS([ETHERTYPE_VLAN],[],[],[[@%:@include <net/ethernet.h>]])
 
 # Check some stuff in linux/if_vlan.h
-AC_CHECK_DECLS([ \
-GET_VLAN_REALDEV_NAME_CMD, \
-GET_VLAN_VID_CMD \
-],[],[],[[@%:@include <linux/if_vlan.h>]])
+AC_CHECK_DECLS([GET_VLAN_REALDEV_NAME_CMD,GET_VLAN_VID_CMD],[],[],
+               [[@%:@include <linux/if_vlan.h>]])
 
 AC_CACHE_SAVE
 
@@ -208,7 +213,7 @@ fi
 AC_ARG_WITH([xml],
   AC_HELP_STRING(
     [--with-xml],
-    [Enable XML output via libxml2 @<:@default=no:>@]
+    [Enable XML output via libxml2 @<:@default=no@:>@]
   ))
 if test x"$with_xml" = x"yes"; then
    lldp_CHECK_XML2
@@ -229,9 +234,6 @@ lldp_ARG_ENABLE([sonmp], [SynOptics Network Management Protocol], [yes])
 lldp_ARG_ENABLE([lldpmed], [LLDP-MED extension], [yes])
 lldp_ARG_ENABLE([dot1], [Dot1 extension (VLAN stuff)], [yes])
 lldp_ARG_ENABLE([dot3], [Dot3 extension (PHY stuff)], [yes])
-
-#Listen on vlan
-lldp_ARG_ENABLE([listenvlan], [listen on any VLAN], [no])
 
 #######################
 # Output results
@@ -256,7 +258,6 @@ cat <<EOF
   LLDPMED........: $enable_lldpmed
   DOT1...........: $enable_dot1
   DOT3...........: $enable_dot3
-  Listen on VLAN.: $enable_listenvlan
   XML output.....: ${with_xml-no}
 ---------------------------------------------
 

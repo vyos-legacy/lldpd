@@ -32,7 +32,7 @@ Logical-Link Control
 Cisco Discovery Protocol
     Version: 1
     TTL: 180 seconds
-    Checksum: 0x3b07 [correct]
+    Checksum: 0x3af7 [correct]
         [Good: True]
         [Bad : False]
     Device ID: First chassis
@@ -56,12 +56,12 @@ Cisco Discovery Protocol
     Capabilities
         Type: Capabilities (0x0004)
         Length: 8
-        Capabilities: 0x00000001
+        Capabilities: 0x00000011
             .... .... .... .... .... .... .... ...1 = Is  a Router
             .... .... .... .... .... .... .... ..0. = Not a Transparent Bridge
             .... .... .... .... .... .... .... .0.. = Not a Source Route Bridge
             .... .... .... .... .... .... .... 0... = Not a Switch
-            .... .... .... .... .... .... ...0 .... = Not a Host
+            .... .... .... .... .... .... ...1 .... = Is  a Host
             .... .... .... .... .... .... ..0. .... = Not IGMP capable
             .... .... .... .... .... .... .0.. .... = Not a Repeater
     Software Version
@@ -77,14 +77,14 @@ Cisco Discovery Protocol
 	  0x01, 0x00, 0x0c, 0xcc, 0xcc, 0xcc, 0x5e, 0x10,
 	  0x8e, 0xe7, 0x84, 0xad, 0x00, 0x6a, 0xaa, 0xaa,
 	  0x03, 0x00, 0x00, 0x0c, 0x20, 0x00, 0x01, 0xb4,
-	  0x3b, 0x07, 0x00, 0x01, 0x00, 0x11, 0x46, 0x69,
+	  0x3a, 0xf7, 0x00, 0x01, 0x00, 0x11, 0x46, 0x69,
 	  0x72, 0x73, 0x74, 0x20, 0x63, 0x68, 0x61, 0x73,
 	  0x73, 0x69, 0x73, 0x00, 0x02, 0x00, 0x11, 0x00,
 	  0x00, 0x00, 0x01, 0x01, 0x01, 0xcc, 0x00, 0x04,
 	  0xac, 0x11, 0x8e, 0x25, 0x00, 0x03, 0x00, 0x14,
 	  0x46, 0x61, 0x73, 0x74, 0x45, 0x74, 0x68, 0x65,
 	  0x72, 0x6e, 0x65, 0x74, 0x20, 0x31, 0x2f, 0x35,
-	  0x00, 0x04, 0x00, 0x08, 0x00, 0x00, 0x00, 0x01,
+	  0x00, 0x04, 0x00, 0x08, 0x00, 0x00, 0x00, 0x11,
 	  0x00, 0x05, 0x00, 0x17, 0x43, 0x68, 0x61, 0x73,
 	  0x73, 0x69, 0x73, 0x20, 0x64, 0x65, 0x73, 0x63,
 	  0x72, 0x69, 0x70, 0x74, 0x69, 0x6f, 0x6e, 0x00,
@@ -102,7 +102,13 @@ Cisco Discovery Protocol
 	chassis.c_name = "First chassis";
 	chassis.c_descr = "Chassis description";
 	chassis.c_cap_available = chassis.c_cap_enabled = LLDP_CAP_ROUTER;
-	chassis.c_mgmt.s_addr = inet_addr("172.17.142.37");
+	TAILQ_INIT(&chassis.c_mgmt);
+	in_addr_t addr = inet_addr("172.17.142.37");
+	struct lldpd_mgmt *mgmt = lldpd_alloc_mgmt(LLDPD_AF_IPV4, 
+					&addr, sizeof(in_addr_t), 0);
+	if (mgmt == NULL)
+		ck_abort();
+	TAILQ_INSERT_TAIL(&chassis.c_mgmt, mgmt, m_entries);
 
 	/* Build packet */
 	n = cdpv1_send(NULL, &hardware);
@@ -143,7 +149,7 @@ Logical-Link Control
 Cisco Discovery Protocol
     Version: 2
     TTL: 180 seconds
-    Checksum: 0x6926 [correct]
+    Checksum: 0x5926 [correct]
         [Good: True]
         [Bad : False]
     Device ID: Second chassis
@@ -152,14 +158,20 @@ Cisco Discovery Protocol
         Device ID: Second chassis
     Addresses
         Type: Addresses (0x0002)
-        Length: 17
-        Number of addresses: 1
+        Length: 26
+        Number of addresses: 2
         IP address: 172.17.142.36
             Protocol type: NLPID
             Protocol length: 1
             Protocol: IP
             Address length: 4
             IP address: 172.17.142.36
+        IP address: 172.17.142.38
+            Protocol type: NLPID
+            Protocol length: 1
+            Protocol: IP
+            Address length: 4
+            IP address: 172.17.142.38
     Port ID: Gigabit Ethernet 5/8
         Type: Port ID (0x0003)
         Length: 24
@@ -167,12 +179,12 @@ Cisco Discovery Protocol
     Capabilities
         Type: Capabilities (0x0004)
         Length: 8
-        Capabilities: 0x00000009
+        Capabilities: 0x00000019
             .... .... .... .... .... .... .... ...1 = Is  a Router
             .... .... .... .... .... .... .... ..0. = Not a Transparent Bridge
             .... .... .... .... .... .... .... .0.. = Not a Source Route Bridge
             .... .... .... .... .... .... .... 1... = Is  a Switch
-            .... .... .... .... .... .... ...0 .... = Not a Host
+            .... .... .... .... .... .... ...1 .... = Is  a Host
             .... .... .... .... .... .... ..0. .... = Not IGMP capable
             .... .... .... .... .... .... .0.. .... = Not a Repeater
     Software Version
@@ -186,21 +198,22 @@ Cisco Discovery Protocol
 	*/
 	char pkt1[] = {
 	  0x01, 0x00, 0x0c, 0xcc, 0xcc, 0xcc, 0x5e, 0x10,
-	  0x8e, 0xe7, 0x84, 0xad, 0x00, 0x6f, 0xaa, 0xaa,
+	  0x8e, 0xe7, 0x84, 0xad, 0x00, 0x78, 0xaa, 0xaa,
 	  0x03, 0x00, 0x00, 0x0c, 0x20, 0x00, 0x02, 0xb4,
-	  0x69, 0x26, 0x00, 0x01, 0x00, 0x12, 0x53, 0x65,
+	  0xc8, 0x67, 0x00, 0x01, 0x00, 0x12, 0x53, 0x65,
 	  0x63, 0x6f, 0x6e, 0x64, 0x20, 0x63, 0x68, 0x61,
-	  0x73, 0x73, 0x69, 0x73, 0x00, 0x02, 0x00, 0x11,
-	  0x00, 0x00, 0x00, 0x01, 0x01, 0x01, 0xcc, 0x00,
-	  0x04, 0xac, 0x11, 0x8e, 0x24, 0x00, 0x03, 0x00,
-	  0x18, 0x47, 0x69, 0x67, 0x61, 0x62, 0x69, 0x74,
-	  0x20, 0x45, 0x74, 0x68, 0x65, 0x72, 0x6e, 0x65,
-	  0x74, 0x20, 0x35, 0x2f, 0x38, 0x00, 0x04, 0x00,
-	  0x08, 0x00, 0x00, 0x00, 0x09, 0x00, 0x05, 0x00,
-	  0x17, 0x43, 0x68, 0x61, 0x73, 0x73, 0x69, 0x73,
-	  0x20, 0x64, 0x65, 0x73, 0x63, 0x72, 0x69, 0x70,
-	  0x74, 0x69, 0x6f, 0x6e, 0x00, 0x06, 0x00, 0x09,
-	  0x4c, 0x69, 0x6e, 0x75, 0x78 };
+	  0x73, 0x73, 0x69, 0x73, 0x00, 0x02, 0x00, 0x1a,
+	  0x00, 0x00, 0x00, 0x02, 0x01, 0x01, 0xcc, 0x00,
+	  0x04, 0xac, 0x11, 0x8e, 0x24, 0x01, 0x01, 0xcc,
+	  0x00, 0x04, 0xac, 0x11, 0x8e, 0x26, 0x00, 0x03,
+	  0x00, 0x18, 0x47, 0x69, 0x67, 0x61, 0x62, 0x69,
+	  0x74, 0x20, 0x45, 0x74, 0x68, 0x65, 0x72, 0x6e,
+	  0x65, 0x74, 0x20, 0x35, 0x2f, 0x38, 0x00, 0x04,
+	  0x00, 0x08, 0x00, 0x00, 0x00, 0x19, 0x00, 0x05,
+	  0x00, 0x17, 0x43, 0x68, 0x61, 0x73, 0x73, 0x69,
+	  0x73, 0x20, 0x64, 0x65, 0x73, 0x63, 0x72, 0x69,
+	  0x70, 0x74, 0x69, 0x6f, 0x6e, 0x00, 0x06, 0x00,
+	  0x09, 0x4c, 0x69, 0x6e, 0x75, 0x78 };
 	struct packet *pkt;
 
 	/* Populate port and chassis */
@@ -215,7 +228,17 @@ Cisco Discovery Protocol
 	chassis.c_descr = "Chassis description";
 	chassis.c_cap_available = chassis.c_cap_enabled =
 	  LLDP_CAP_ROUTER | LLDP_CAP_BRIDGE;
-	chassis.c_mgmt.s_addr = inet_addr("172.17.142.36");
+	TAILQ_INIT(&chassis.c_mgmt);
+	in_addr_t addr1 = inet_addr("172.17.142.36");
+	in_addr_t addr2 = inet_addr("172.17.142.38");
+	struct lldpd_mgmt *mgmt1 = lldpd_alloc_mgmt(LLDPD_AF_IPV4, 
+					&addr1, sizeof(in_addr_t), 0);
+	struct lldpd_mgmt *mgmt2 = lldpd_alloc_mgmt(LLDPD_AF_IPV4, 
+					&addr2, sizeof(in_addr_t), 0);
+	if (mgmt1 == NULL || mgmt2 == NULL)
+		ck_abort();
+	TAILQ_INSERT_TAIL(&chassis.c_mgmt, mgmt1, m_entries);
+	TAILQ_INSERT_TAIL(&chassis.c_mgmt, mgmt2, m_entries);
 
 	/* Build packet */
 	n = cdpv2_send(NULL, &hardware);
@@ -245,7 +268,7 @@ START_TEST (test_recv_cdpv1)
 		0x01, 0x01, 0xcc, 0x00, 0x04, 0xc0, 0xa8, 0x0a,
 		0x01, 0x00, 0x03, 0x00, 0x0d, 0x45, 0x74, 0x68,
 		0x65, 0x72, 0x6e, 0x65, 0x74, 0x30, 0x00, 0x04,
-		0x00, 0x08, 0x00, 0x00, 0x00, 0x01, 0x00, 0x05,
+		0x00, 0x08, 0x00, 0x00, 0x00, 0x11, 0x00, 0x05,
 		0x00, 0xd8, 0x43, 0x69, 0x73, 0x63, 0x6f, 0x20,
 		0x49, 0x6e, 0x74, 0x65, 0x72, 0x6e, 0x65, 0x74,
 		0x77, 0x6f, 0x72, 0x6b, 0x20, 0x4f, 0x70, 0x65,
@@ -317,12 +340,12 @@ Cisco Discovery Protocol
     Capabilities
         Type: Capabilities (0x0004)
         Length: 8
-        Capabilities: 0x00000001
+        Capabilities: 0x00000011
             .... .... .... .... .... .... .... ...1 = Is  a Router
             .... .... .... .... .... .... .... ..0. = Not a Transparent Bridge
             .... .... .... .... .... .... .... .0.. = Not a Source Route Bridge
             .... .... .... .... .... .... .... 0... = Not a Switch
-            .... .... .... .... .... .... ...0 .... = Not a Host
+            .... .... .... .... .... .... ...1 .... = Is  a Host
             .... .... .... .... .... .... ..0. .... = Not IGMP capable
             .... .... .... .... .... .... .0.. .... = Not a Repeater
     Software Version
@@ -352,9 +375,9 @@ Cisco Discovery Protocol
 	ck_assert_int_eq(nchassis->c_id_len, 2);
 	fail_unless(memcmp(nchassis->c_id, "R1", 2) == 0);
 	ck_assert_str_eq(nchassis->c_name, "R1");
-	ck_assert_int_eq(nchassis->c_mgmt.s_addr,
+	ck_assert_int_eq(TAILQ_FIRST(&nchassis->c_mgmt)->m_addr.inet.s_addr,
 	    (u_int32_t)inet_addr("192.168.10.1"));
-	ck_assert_int_eq(nchassis->c_mgmt_if, 0);
+	ck_assert_int_eq(TAILQ_FIRST(&nchassis->c_mgmt)->m_iface, 0);
 	ck_assert_int_eq(nport->p_id_subtype,
 	    LLDP_PORTID_SUBTYPE_IFNAME);
 	ck_assert_int_eq(nport->p_id_len, strlen("Ethernet0"));
@@ -496,9 +519,9 @@ Cisco Discovery Protocol
 	fail_unless(memcmp(nchassis->c_id,
 		"rtbg6test01", strlen("rtbg6test01")) == 0);
 	ck_assert_str_eq(nchassis->c_name, "rtbg6test01");
-	ck_assert_int_eq(nchassis->c_mgmt.s_addr,
+	ck_assert_int_eq(TAILQ_FIRST(&nchassis->c_mgmt)->m_addr.inet.s_addr,
 	    (u_int32_t)inet_addr("172.66.55.3"));
-	ck_assert_int_eq(nchassis->c_mgmt_if, 0);
+	ck_assert_int_eq(TAILQ_FIRST(&nchassis->c_mgmt)->m_iface, 0);
 	ck_assert_int_eq(nport->p_id_subtype,
 	    LLDP_PORTID_SUBTYPE_IFNAME);
 	ck_assert_int_eq(nport->p_id_len, strlen("FastEthernet0/0"));

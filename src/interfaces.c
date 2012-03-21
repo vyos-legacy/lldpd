@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2008 Vincent Bernat <bernat@luffy.cx>
  *
- * Permission to use, copy, modify, and distribute this software for any
+ * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
  * copyright notice and this permission notice appear in all copies.
  *
@@ -18,8 +18,10 @@
 #include "lldpd.h"
 
 #include <stdio.h>
+#include <stddef.h>
 #include <unistd.h>
 #include <errno.h>
+#include <assert.h>
 #include <sys/ioctl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -45,80 +47,78 @@
 /* CDP: "ether dst 01:00:0c:cc:cc:cc" */
 /* SONMP: "ether dst 01:00:81:00:01:00" */
 /* EDP: "ether dst 00:e0:2b:00:00:00" */
-#define LLDPD_FILTER_F			\
-	{ 0x28, 0, 0, 0x0000000c },	\
-	{ 0x15, 0, 4, 0x000088cc },	\
-	{ 0x20, 0, 0, 0x00000002 },	\
-	{ 0x15, 0, 2, 0xc200000e },	\
-	{ 0x28, 0, 0, 0x00000000 },	\
-	{ 0x15, 11, 12, 0x00000180 },	\
-	{ 0x20, 0, 0, 0x00000002 },	\
-	{ 0x15, 0, 2, 0x2b000000 },	\
-	{ 0x28, 0, 0, 0x00000000 },	\
-	{ 0x15, 7, 8, 0x000000e0 },	\
-	{ 0x15, 1, 0, 0x0ccccccc },	\
-	{ 0x15, 0, 2, 0x81000100 },	\
-	{ 0x28, 0, 0, 0x00000000 },	\
-	{ 0x15, 3, 4, 0x00000100 },	\
-	{ 0x15, 0, 3, 0x52cccccc },	\
-	{ 0x28, 0, 0, 0x00000000 },	\
-	{ 0x15, 0, 1, 0x000001e0 },	\
-	{ 0x6, 0, 0, 0x0000ffff },	\
+/* For optimization purpose, we first check if the first bit of the
+   first byte is 1. if not, this can only be an EDP packet:
+
+   tcpdump -dd "(ether[0] & 1 = 1 and
+                 ((ether proto 0x88cc and ether dst 01:80:c2:00:00:0e) or
+                  (ether dst 01:e0:52:cc:cc:cc) or
+                  (ether dst 01:00:0c:cc:cc:cc) or
+                  (ether dst 01:00:81:00:01:00))) or
+                (ether dst 00:e0:2b:00:00:00)"
+*/
+
+#define LLDPD_FILTER_F				\
+	{ 0x30, 0, 0, 0x00000000 },		\
+	{ 0x54, 0, 0, 0x00000001 },		\
+	{ 0x15, 0, 14, 0x00000001 },		\
+	{ 0x28, 0, 0, 0x0000000c },		\
+	{ 0x15, 0, 4, 0x000088cc },		\
+	{ 0x20, 0, 0, 0x00000002 },		\
+	{ 0x15, 0, 2, 0xc200000e },		\
+	{ 0x28, 0, 0, 0x00000000 },		\
+	{ 0x15, 12, 13, 0x00000180 },		\
+	{ 0x20, 0, 0, 0x00000002 },		\
+	{ 0x15, 0, 2, 0x52cccccc },		\
+	{ 0x28, 0, 0, 0x00000000 },		\
+	{ 0x15, 8, 9, 0x000001e0 },		\
+	{ 0x15, 1, 0, 0x0ccccccc },		\
+	{ 0x15, 0, 2, 0x81000100 },		\
+	{ 0x28, 0, 0, 0x00000000 },		\
+	{ 0x15, 4, 5, 0x00000100 },		\
+	{ 0x20, 0, 0, 0x00000002 },		\
+	{ 0x15, 0, 3, 0x2b000000 },		\
+	{ 0x28, 0, 0, 0x00000000 },		\
+	{ 0x15, 0, 1, 0x000000e0 },		\
+	{ 0x6, 0, 0, 0x0000ffff },		\
 	{ 0x6, 0, 0, 0x00000000 },
+
 static struct sock_filter lldpd_filter_f[] = { LLDPD_FILTER_F };
 
 /* net/if.h */
 extern unsigned int if_nametoindex (__const char *__ifname) __THROW;
 extern char *if_indextoname (unsigned int __ifindex, char *__ifname) __THROW;
 
-static int	 iface_is_bridge(struct lldpd *, const char *);
-#ifdef ENABLE_DOT1
-static int	 iface_is_bridged_to(struct lldpd *,
-    const char *, const char *);
-#endif
-static int	 iface_is_wireless(struct lldpd *, const char *);
-static int	 iface_is_vlan(struct lldpd *, const char *);
-static int	 iface_is_bond(struct lldpd *, const char *);
-static int	 iface_is_bond_slave(struct lldpd *,
-    const char *, const char *, int *);
-static int	 iface_is_enslaved(struct lldpd *, const char *);
-static void	 iface_get_permanent_mac(struct lldpd *, struct lldpd_hardware *);
-static int	 iface_minimal_checks(struct lldpd *, struct ifaddrs *);
-static int	 iface_set_filter(const char *, int);
+struct lldpd_ops eth_ops;
+struct lldpd_ops bond_ops;
 
-static void	 iface_port_name_desc(struct lldpd_hardware *);
-static void	 iface_macphy(struct lldpd_hardware *);
-static void	 iface_mtu(struct lldpd *, struct lldpd_hardware *);
-static void	 iface_multicast(struct lldpd *, const char *, int);
-static int	 iface_eth_init(struct lldpd *, struct lldpd_hardware *);
-static int	 iface_bond_init(struct lldpd *, struct lldpd_hardware *);
-static void	 iface_fds_close(struct lldpd *, struct lldpd_hardware *);
-#ifdef ENABLE_DOT1
-#ifdef ENABLE_LISTENVLAN
-static void	 iface_vlan_close(struct lldpd *, struct lldpd_hardware *);
-static void	 iface_listen_vlan(struct lldpd *,
-    struct lldpd_hardware *, struct ifaddrs *);
-#endif
-static void	 iface_append_vlan(struct lldpd *,
-    struct lldpd_hardware *, struct ifaddrs *);
-#endif
+static int
+pattern_match(char *iface, char *list, int found)
+{
+	char *interfaces = NULL;
+	char *pattern;
 
-static int	 iface_eth_send(struct lldpd *, struct lldpd_hardware*, char *, size_t);
-static int	 iface_eth_recv(struct lldpd *, struct lldpd_hardware*, int, char*, size_t);
-static int	 iface_eth_close(struct lldpd *, struct lldpd_hardware *);
-struct lldpd_ops eth_ops = {
-	.send = iface_eth_send,
-	.recv = iface_eth_recv,
-	.cleanup = iface_eth_close,
-};
-static int	 iface_bond_send(struct lldpd *, struct lldpd_hardware*, char *, size_t);
-static int	 iface_bond_recv(struct lldpd *, struct lldpd_hardware*, int, char*, size_t);
-static int	 iface_bond_close(struct lldpd *, struct lldpd_hardware *);
-struct lldpd_ops bond_ops = {
-	.send = iface_bond_send,
-	.recv = iface_bond_recv,
-	.cleanup = iface_bond_close,
-};
+	if ((interfaces = strdup(list)) == NULL) {
+		LLOG_WARNX("unable to allocate memory");
+		return 0;
+	}
+
+	for (pattern = strtok(interfaces, ",");
+	     pattern != NULL;
+	     pattern = strtok(NULL, ",")) {
+		if ((pattern[0] == '!') &&
+		    ((fnmatch(pattern + 1, iface, 0) == 0))) {
+			/* Blacklisted. No need to search further. */
+			found = 0;
+			break;
+		}
+		if (fnmatch(pattern, iface, 0) == 0)
+			found = 1;
+	}
+
+	free(interfaces);
+	return found;
+}
 
 static int
 old_iface_is_bridge(struct lldpd *cfg, const char *name)
@@ -396,8 +396,18 @@ iface_get_permanent_mac(struct lldpd *cfg, struct lldpd_hardware *hardware)
 static int
 iface_minimal_checks(struct lldpd *cfg, struct ifaddrs *ifa)
 {
-	struct sockaddr_ll *sdl;
+	struct sockaddr_ll sdl;
 	struct ifreq ifr;
+	struct ethtool_drvinfo ethc;
+	const char * const *rif;
+
+	/* White-list some drivers */
+	const char * const regular_interfaces[] = {
+		"dsa",
+		"veth",
+		NULL
+	};
+
 	int is_bridge = iface_is_bridge(cfg, ifa->ifa_name);
 
 	if (!(LOCAL_CHASSIS(cfg)->c_cap_enabled & LLDP_CAP_BRIDGE) &&
@@ -418,14 +428,28 @@ iface_minimal_checks(struct lldpd *cfg, struct ifaddrs *ifa)
 	    ifa->ifa_addr->sa_family != PF_PACKET)
 		return 0;
 
-	sdl = (struct sockaddr_ll *)ifa->ifa_addr;
-	if (sdl->sll_hatype != ARPHRD_ETHER || !sdl->sll_halen)
+	memcpy(&sdl, ifa->ifa_addr, sizeof(struct sockaddr_ll));
+	if (sdl.sll_hatype != ARPHRD_ETHER || !sdl.sll_halen)
 		return 0;
 
 	/* We request that the interface is able to do either multicast
 	 * or broadcast to be able to send discovery frames. */
 	if (!(ifa->ifa_flags & (IFF_MULTICAST|IFF_BROADCAST)))
 		return 0;
+
+	/* Check if the driver is whitelisted */
+	memset(&ifr, 0, sizeof(ifr));
+	strcpy(ifr.ifr_name, ifa->ifa_name);
+	ifr.ifr_data = (caddr_t) &ethc;
+	ethc.cmd = ETHTOOL_GDRVINFO;
+	if (ioctl(cfg->g_sock, SIOCETHTOOL, &ifr) == 0) {
+		for (rif = regular_interfaces; *rif; rif++) {
+			if (strcmp(ethc.driver, *rif) == 0) {
+				/* White listed! */
+				return 1;
+			}
+		}
+	}
 
 	/* Check queue len. If no queue, this usually means that this
 	   is not a "real" interface. */
@@ -529,45 +553,45 @@ iface_macphy(struct lldpd_hardware *hardware)
 		{0,0}};
 
 	if (priv_ethtool(hardware->h_ifname, &ethc) == 0) {
-		port->p_autoneg_support = (ethc.supported & SUPPORTED_Autoneg) ? 1 : 0;
-		port->p_autoneg_enabled = (ethc.autoneg == AUTONEG_DISABLE) ? 0 : 1;
+		port->p_macphy.autoneg_support = (ethc.supported & SUPPORTED_Autoneg) ? 1 : 0;
+		port->p_macphy.autoneg_enabled = (ethc.autoneg == AUTONEG_DISABLE) ? 0 : 1;
 		for (j=0; advertised_ethtool_to_rfc3636[j][0]; j++) {
 			if (ethc.advertising & advertised_ethtool_to_rfc3636[j][0])
-				port->p_autoneg_advertised |= 
+				port->p_macphy.autoneg_advertised |= 
 				    advertised_ethtool_to_rfc3636[j][1];
 		}
 		switch (ethc.speed) {
 		case SPEED_10:
-			port->p_mau_type = (ethc.duplex == DUPLEX_FULL) ? \
+			port->p_macphy.mau_type = (ethc.duplex == DUPLEX_FULL) ? \
 			    LLDP_DOT3_MAU_10BASETFD : LLDP_DOT3_MAU_10BASETHD;
-			if (ethc.port == PORT_BNC) port->p_mau_type = LLDP_DOT3_MAU_10BASE2;
+			if (ethc.port == PORT_BNC) port->p_macphy.mau_type = LLDP_DOT3_MAU_10BASE2;
 			if (ethc.port == PORT_FIBRE)
-				port->p_mau_type = (ethc.duplex == DUPLEX_FULL) ? \
+				port->p_macphy.mau_type = (ethc.duplex == DUPLEX_FULL) ? \
 				    LLDP_DOT3_MAU_10BASEFLDF : LLDP_DOT3_MAU_10BASEFLHD;
 			break;
 		case SPEED_100:
-			port->p_mau_type = (ethc.duplex == DUPLEX_FULL) ? \
+			port->p_macphy.mau_type = (ethc.duplex == DUPLEX_FULL) ? \
 			    LLDP_DOT3_MAU_100BASETXFD : LLDP_DOT3_MAU_100BASETXHD;
 			if (ethc.port == PORT_BNC)
-				port->p_mau_type = (ethc.duplex == DUPLEX_FULL) ? \
+				port->p_macphy.mau_type = (ethc.duplex == DUPLEX_FULL) ? \
 				    LLDP_DOT3_MAU_100BASET2DF : LLDP_DOT3_MAU_100BASET2HD;
 			if (ethc.port == PORT_FIBRE)
-				port->p_mau_type = (ethc.duplex == DUPLEX_FULL) ? \
+				port->p_macphy.mau_type = (ethc.duplex == DUPLEX_FULL) ? \
 				    LLDP_DOT3_MAU_100BASEFXFD : LLDP_DOT3_MAU_100BASEFXHD;
 			break;
 		case SPEED_1000:
-			port->p_mau_type = (ethc.duplex == DUPLEX_FULL) ? \
+			port->p_macphy.mau_type = (ethc.duplex == DUPLEX_FULL) ? \
 			    LLDP_DOT3_MAU_1000BASETFD : LLDP_DOT3_MAU_1000BASETHD;
 			if (ethc.port == PORT_FIBRE)
-				port->p_mau_type = (ethc.duplex == DUPLEX_FULL) ? \
+				port->p_macphy.mau_type = (ethc.duplex == DUPLEX_FULL) ? \
 				    LLDP_DOT3_MAU_1000BASEXFD : LLDP_DOT3_MAU_1000BASEXHD;
 			break;
 		case SPEED_10000:
-			port->p_mau_type = (ethc.port == PORT_FIBRE) ?	\
+			port->p_macphy.mau_type = (ethc.port == PORT_FIBRE) ?	\
 					LLDP_DOT3_MAU_10GIGBASEX : LLDP_DOT3_MAU_10GIGBASER;
 			break;
 		}
-		if (ethc.port == PORT_AUI) port->p_mau_type = LLDP_DOT3_MAU_AUI;
+		if (ethc.port == PORT_AUI) port->p_macphy.mau_type = LLDP_DOT3_MAU_AUI;
 	}
 #endif
 }
@@ -678,9 +702,6 @@ iface_eth_recv(struct lldpd *cfg, struct lldpd_hardware *hardware,
 static int
 iface_eth_close(struct lldpd *cfg, struct lldpd_hardware *hardware)
 {
-#if defined(ENABLE_DOT1) && defined(ENABLE_LISTENVLAN)
-	iface_vlan_close(cfg, hardware);
-#endif
 	close(hardware->h_sendfd);
 	iface_multicast(cfg, hardware->h_ifname, 1);
 	return 0;
@@ -691,8 +712,6 @@ lldpd_ifh_eth(struct lldpd *cfg, struct ifaddrs *ifap)
 {
 	struct ifaddrs *ifa;
 	struct lldpd_hardware *hardware;
-	struct lldpd_port *port;
-	u_int8_t *lladdr;
 
 	for (ifa = ifap; ifa != NULL; ifa = ifa->ifa_next) {
 		if (!iface_minimal_checks(cfg, ifa))
@@ -721,7 +740,6 @@ lldpd_ifh_eth(struct lldpd *cfg, struct ifaddrs *ifap)
 			lldpd_port_cleanup(cfg, &hardware->h_lport, 0);
 		}
 
-		port = &hardware->h_lport;
 		hardware->h_flags = ifa->ifa_flags; /* Should be non-zero */
 		ifa->ifa_flags = 0;		    /* Future handlers
 						       don't have to
@@ -729,8 +747,10 @@ lldpd_ifh_eth(struct lldpd *cfg, struct ifaddrs *ifap)
 						       interface. */
 
 		/* Get local address */
-		lladdr = (u_int8_t*)(((struct sockaddr_ll *)ifa->ifa_addr)->sll_addr);
-		memcpy(&hardware->h_lladdr, lladdr, sizeof(hardware->h_lladdr));
+		memcpy(&hardware->h_lladdr,
+		    (u_int8_t*)((u_int8_t*)ifa->ifa_addr +
+			offsetof(struct sockaddr_ll, sll_addr)),
+		    sizeof(hardware->h_lladdr));
 
 		/* Fill information about port */
 		iface_port_name_desc(hardware);
@@ -738,6 +758,24 @@ lldpd_ifh_eth(struct lldpd *cfg, struct ifaddrs *ifap)
 		/* Fill additional info */
 		iface_macphy(hardware);
 		iface_mtu(cfg, hardware);
+	}
+}
+
+void
+lldpd_ifh_whitelist(struct lldpd *cfg, struct ifaddrs *ifap)
+{
+	struct ifaddrs *ifa;
+
+	if (!cfg->g_interfaces)
+		return;
+
+	for (ifa = ifap; ifa != NULL; ifa = ifa->ifa_next) {
+		if (ifa->ifa_flags == 0) continue; /* Already handled by someone else */
+		if (!pattern_match(ifa->ifa_name, cfg->g_interfaces, 0)) {
+			/* This interface was not found. We flag it. */
+			LLOG_DEBUG("blacklist %s", ifa->ifa_name);
+			ifa->ifa_flags = 0;
+		}
 	}
 }
 
@@ -854,9 +892,6 @@ iface_bond_recv(struct lldpd *cfg, struct lldpd_hardware *hardware,
 static int
 iface_bond_close(struct lldpd *cfg, struct lldpd_hardware *hardware)
 {
-#if defined(ENABLE_DOT1) && defined(ENABLE_LISTENVLAN)
-	iface_vlan_close(cfg, hardware);
-#endif
 	iface_fds_close(cfg, hardware); /* h_sendfd is here too */
 	iface_multicast(cfg, hardware->h_ifname, 1);
 	iface_multicast(cfg, (char*)hardware->h_data, 1);
@@ -869,7 +904,6 @@ lldpd_ifh_bond(struct lldpd *cfg, struct ifaddrs *ifap)
 {
 	struct ifaddrs *ifa;
 	struct lldpd_hardware *hardware;
-	struct lldpd_port *port;
 	int master;
 	for (ifa = ifap; ifa != NULL; ifa = ifa->ifa_next) {
 		if (!iface_minimal_checks(cfg, ifa))
@@ -905,7 +939,6 @@ lldpd_ifh_bond(struct lldpd *cfg, struct ifaddrs *ifap)
 			lldpd_port_cleanup(cfg, &hardware->h_lport, 0);
 		}
 		
-		port = &hardware->h_lport;
 		hardware->h_flags = ifa->ifa_flags;
 		ifa->ifa_flags = 0;
 
@@ -917,7 +950,7 @@ lldpd_ifh_bond(struct lldpd *cfg, struct ifaddrs *ifap)
 		
 		/* Fill additional info */
 #ifdef ENABLE_DOT3
-		port->p_aggregid = master;
+		hardware->h_lport.p_aggregid = master;
 #endif
 		iface_macphy(hardware);
 		iface_mtu(cfg, hardware);
@@ -925,88 +958,6 @@ lldpd_ifh_bond(struct lldpd *cfg, struct ifaddrs *ifap)
 }
 
 #ifdef ENABLE_DOT1
-#ifdef ENABLE_LISTENVLAN
-/* We keep here the list of VLAN we listen to. */
-struct iface_vlans {
-	TAILQ_ENTRY(iface_vlans) next;
-	struct lldpd_hardware *hardware;
-	char vlan[IFNAMSIZ];
-	int fd;
-	int refreshed;
-};
-TAILQ_HEAD(, iface_vlans) ifvls;
-
-static void
-_iface_vlan_setup()
-{
-	static int done = 0;
-	if (done) return;
-	TAILQ_INIT(&ifvls);
-	done = 1;
-}
-
-/* Close the list of VLAN associated to the given hardware port if we have
-   requested the "listen on vlan" feature. If hardware is NULL, then use
-   `refreshed' to clean up. */
-static void
-iface_vlan_close(struct lldpd *cfg, struct lldpd_hardware *hardware)
-{
-	struct iface_vlans *ifvl, *ifvl_next;
-	if (!cfg->g_listen_vlans) return;
-	_iface_vlan_setup();
-	for (ifvl = TAILQ_FIRST(&ifvls); ifvl; ifvl = ifvl_next) {
-		ifvl_next = TAILQ_NEXT(ifvl, next);
-		if (hardware && (ifvl->hardware != hardware)) continue;
-		if (!hardware && (ifvl->refreshed)) continue;
-		close(ifvl->fd);
-		iface_multicast(cfg, ifvl->vlan, 1);
-		FD_CLR(ifvl->fd, &hardware->h_recvfds);
-		TAILQ_REMOVE(&ifvls, ifvl, next);
-		free(ifvl);
-	}
-}
-
-/* Listen on the given vlan on behalf of the given interface */
-static void
-iface_listen_vlan(struct lldpd *cfg,
-    struct lldpd_hardware *hardware, struct ifaddrs *ifa)
-{
-	struct iface_vlans *ifvl;
-	int fd;
-
-	if (!cfg->g_listen_vlans) return;
-	_iface_vlan_setup();
-	if (!(ifa->ifa_flags & IFF_RUNNING)) return;
-	TAILQ_FOREACH(ifvl, &ifvls, next)
-		if ((ifvl->hardware == hardware) &&
-		    (strncmp(ifvl->vlan, ifa->ifa_name, IFNAMSIZ) == 0)) break;
-	if (ifvl) {
-		ifvl->refreshed = 1;
-		return;	/* We are already listening to it */
-	}
-	if ((ifvl = (struct iface_vlans *)
-		malloc(sizeof(struct iface_vlans))) == NULL)
-		return;		/* Just give up */
-
-	if ((fd = priv_iface_init(ifa->ifa_name)) == -1) {
-		free(ifvl);
-		return;
-	}
-	if (iface_set_filter(ifa->ifa_name, fd) != 0) {
-		free(ifvl);
-		close(fd);
-		return;
-	}
-	FD_SET(fd, &hardware->h_recvfds);
-	ifvl->fd = fd;
-	iface_multicast(cfg, ifa->ifa_name, 0);
-	ifvl->refreshed = 1;
-	strlcpy(ifvl->vlan, ifa->ifa_name, IFNAMSIZ);
-	ifvl->hardware = hardware;
-	TAILQ_INSERT_TAIL(&ifvls, ifvl, next);
-}
-#endif /* ENABLE_LISTENVLAN */
-
 static void
 iface_append_vlan(struct lldpd *cfg,
     struct lldpd_hardware *hardware, struct ifaddrs *ifa)
@@ -1037,10 +988,6 @@ iface_append_vlan(struct lldpd *cfg,
 	}
 	vlan->v_vid = ifv.u.VID;
 	TAILQ_INSERT_TAIL(&port->p_vlans, vlan, v_entries);
-
-#ifdef ENABLE_LISTENVLAN
-	iface_listen_vlan(cfg, hardware, ifa);
-#endif
 }
 
 void
@@ -1050,15 +997,6 @@ lldpd_ifh_vlan(struct lldpd *cfg, struct ifaddrs *ifap)
 	struct vlan_ioctl_args ifv;
 	struct lldpd_hardware *hardware;
 	
-#ifdef ENABLE_LISTENVLAN
-	struct iface_vlans *ifvl;
-	if (cfg->g_listen_vlans) {
-		_iface_vlan_setup();
-		TAILQ_FOREACH(ifvl, &ifvls, next)
-		    ifvl->refreshed = 0;
-	}
-#endif
-
 	for (ifa = ifap; ifa != NULL; ifa = ifa->ifa_next) {
 		if (!ifa->ifa_flags)
 			continue;
@@ -1101,10 +1039,18 @@ lldpd_ifh_vlan(struct lldpd *cfg, struct ifaddrs *ifap)
 			    hardware, ifa);
 		}
 	}
-#ifdef ENABLE_LISTENVLAN
-	iface_vlan_close(cfg, NULL);
-#endif
 }
+#endif
+
+#ifndef IN_IS_ADDR_LOOPBACK
+#define IN_IS_ADDR_LOOPBACK(a) ((a)->s_addr == htonl(INADDR_LOOPBACK))
+#endif
+#ifndef IN_IS_ADDR_GLOBAL
+#define IN_IS_ADDR_GLOBAL(a) (!IN_IS_ADDR_LOOPBACK(a))
+#endif
+#ifndef IN6_IS_ADDR_GLOBAL
+#define IN6_IS_ADDR_GLOBAL(a) (!IN6_IS_ADDR_LOOPBACK(a) && \
+								!IN6_IS_ADDR_LINKLOCAL(a))
 #endif
 
 /* Find a management address in all available interfaces, even those that were
@@ -1115,34 +1061,127 @@ void
 lldpd_ifh_mgmt(struct lldpd *cfg, struct ifaddrs *ifap)
 {
 	struct ifaddrs *ifa;
-	struct sockaddr_in *sa;
+	char addrstrbuf[INET6_ADDRSTRLEN];
+	struct lldpd_mgmt *mgmt;
+	void *sin_addr_ptr;
+	size_t sin_addr_size;
+	int af;
+	int allnegative = 0;
 
-	if (LOCAL_CHASSIS(cfg)->c_mgmt.s_addr != INADDR_ANY)
-		return;		/* We already have one */
+	lldpd_chassis_mgmt_cleanup(LOCAL_CHASSIS(cfg));
 
-	for (ifa = ifap; ifa != NULL; ifa = ifa->ifa_next) {
-		if ((ifa->ifa_addr != NULL) &&
-		    (ifa->ifa_addr->sa_family == AF_INET)) {
-			/* We have an IPv4 address (IPv6 not handled yet) */
-			sa = (struct sockaddr_in *)ifa->ifa_addr;
-			if ((ntohl(*(u_int32_t*)&sa->sin_addr) != INADDR_LOOPBACK) &&
-			    (cfg->g_mgmt_pattern == NULL)) {
-				memcpy(&LOCAL_CHASSIS(cfg)->c_mgmt,
-				    &sa->sin_addr,
-				    sizeof(struct in_addr));
-				LOCAL_CHASSIS(cfg)->c_mgmt_if = if_nametoindex(ifa->ifa_name);
-			} else if (cfg->g_mgmt_pattern != NULL) {
-				char *ip;
-				ip = inet_ntoa(sa->sin_addr);
-				if (fnmatch(cfg->g_mgmt_pattern,
-					ip, 0) == 0) {
-					memcpy(&LOCAL_CHASSIS(cfg)->c_mgmt,
-					    &sa->sin_addr,
-					    sizeof(struct in_addr));
-					LOCAL_CHASSIS(cfg)->c_mgmt_if =
-					    if_nametoindex(ifa->ifa_name);
+	/* Is the pattern provided all negative? */
+	if (cfg->g_mgmt_pattern == NULL) allnegative = 1;
+	else if (cfg->g_mgmt_pattern[0] == '!') {
+		/* If each comma is followed by '!', its an all
+		   negative pattern */
+		char *sep = cfg->g_mgmt_pattern;
+		while ((sep = strchr(sep, ',')) &&
+		       (*(++sep) == '!'));
+		if (sep == NULL) allnegative = 1;
+	}
+
+	/* Find management addresses */
+	for (af = LLDPD_AF_UNSPEC + 1; af != LLDPD_AF_LAST; af++) {
+		/* We only take one of each address family, unless a
+		   pattern is provided and is not all negative. For
+		   example !*:*,!10.* will only blacklist
+		   addresses. We will pick the first IPv4 address not
+		   matching 10.*. */
+		for (ifa = ifap;
+		     ifa != NULL;
+		     ifa = ifa->ifa_next) {
+			if (ifa->ifa_addr == NULL)
+				continue;
+			if (ifa->ifa_addr->sa_family != lldpd_af(af))
+				continue;
+
+			switch (af) {
+			case LLDPD_AF_IPV4:
+				sin_addr_ptr = &((struct sockaddr_in *)ifa->ifa_addr)->sin_addr;
+				sin_addr_size = sizeof(struct in_addr);
+				if (!IN_IS_ADDR_GLOBAL((struct in_addr *)sin_addr_ptr))
+					continue;
+				break;
+			case LLDPD_AF_IPV6:
+				sin_addr_ptr = &((struct sockaddr_in6 *)ifa->ifa_addr)->sin6_addr;
+				sin_addr_size = sizeof(struct in6_addr);
+				if (!IN6_IS_ADDR_GLOBAL((struct in6_addr *)sin_addr_ptr))
+					continue;
+				break;
+			default:
+				assert(0);
+				continue;
+			}
+			if (inet_ntop(lldpd_af(af), sin_addr_ptr,
+				      addrstrbuf, sizeof(addrstrbuf)) == NULL) {
+				LLOG_WARN("unable to convert IP address to a string");
+				continue;
+			}
+			if (cfg->g_mgmt_pattern == NULL ||
+			    pattern_match(addrstrbuf, cfg->g_mgmt_pattern, allnegative)) {
+				mgmt = lldpd_alloc_mgmt(af, sin_addr_ptr, sin_addr_size,
+							if_nametoindex(ifa->ifa_name));
+				if (mgmt == NULL) {
+					assert(errno == ENOMEM); /* anything else is a bug */
+					LLOG_WARN("out of memory error");
+					return;
 				}
+				TAILQ_INSERT_TAIL(&LOCAL_CHASSIS(cfg)->c_mgmt, mgmt, m_entries);
+
+				/* Don't take additional address if the pattern is all negative. */
+				if (allnegative) break;
 			}
 		}
 	}
 }
+
+
+/* Fill out chassis ID if not already done. This handler is special
+   because we will only handle interfaces that are already handled. */
+void
+lldpd_ifh_chassis(struct lldpd *cfg, struct ifaddrs *ifap)
+{
+	struct ifaddrs *ifa;
+	struct lldpd_hardware *hardware;
+
+	if (LOCAL_CHASSIS(cfg)->c_id != NULL &&
+	    LOCAL_CHASSIS(cfg)->c_id_subtype == LLDP_CHASSISID_SUBTYPE_LLADDR)
+		return;		/* We already have one */
+
+	for (ifa = ifap; ifa != NULL; ifa = ifa->ifa_next) {
+		if (ifa->ifa_flags) continue;
+		if (cfg->g_cid_pattern &&
+		    !pattern_match(ifa->ifa_name, cfg->g_cid_pattern, 0)) continue;
+
+		if ((hardware = lldpd_get_hardware(cfg,
+			    ifa->ifa_name,
+			    if_nametoindex(ifa->ifa_name),
+			    NULL)) == NULL)
+			/* That's odd. Let's skip. */
+			continue;
+
+		char *name = malloc(sizeof(hardware->h_lladdr));
+		if (!name) {
+			LLOG_WARN("Not enough memory for chassis ID");
+			return;
+		}
+		free(LOCAL_CHASSIS(cfg)->c_id);
+		memcpy(name, hardware->h_lladdr, sizeof(hardware->h_lladdr));
+		LOCAL_CHASSIS(cfg)->c_id = name;
+		LOCAL_CHASSIS(cfg)->c_id_len = sizeof(hardware->h_lladdr);
+		LOCAL_CHASSIS(cfg)->c_id_subtype = LLDP_CHASSISID_SUBTYPE_LLADDR;
+		return;
+	}
+}
+
+struct lldpd_ops eth_ops = {
+	.send = iface_eth_send,
+	.recv = iface_eth_recv,
+	.cleanup = iface_eth_close,
+};
+struct lldpd_ops bond_ops = {
+	.send = iface_bond_send,
+	.recv = iface_bond_recv,
+	.cleanup = iface_bond_close,
+};

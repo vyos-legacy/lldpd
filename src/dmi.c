@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2009 Vincent Bernat <bernat@luffy.cx>
  *
- * Permission to use, copy, modify, and distribute this software for any
+ * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
  * copyright notice and this permission notice appear in all copies.
  *
@@ -29,6 +29,7 @@
 	    - asset: /sys/class/dmi/id/chassis_asset_tag
 	*/
 
+#if __i386__ || __amd64__
 char*
 dmi_get(char *file)
 {
@@ -89,4 +90,5 @@ dmi_asset()
 {
 	return dmi_get(SYSFS_CLASS_DMI "chassis_asset_tag");
 }
+#endif
 #endif

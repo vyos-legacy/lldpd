@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2008 Vincent Bernat <bernat@luffy.cx>
  *
- * Permission to use, copy, modify, and distribute this software for any
+ * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
  * copyright notice and this permission notice appear in all copies.
  *
@@ -24,8 +24,10 @@
 #include <fcntl.h>
 #include <time.h>
 #include <libgen.h>
+#include <assert.h>
 #include <sys/utsname.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <sys/socket.h>
 #include <sys/select.h>
 #include <sys/time.h>
@@ -48,7 +50,7 @@ static void		 usage(void);
 
 static struct protocol protos[] =
 {
-	{ LLDPD_MODE_LLDP, 1, "LLDP", ' ', lldp_send, lldp_decode, NULL,
+	{ LLDPD_MODE_LLDP, 1, "LLDP", 'l', lldp_send, lldp_decode, NULL,
 	  LLDP_MULTICAST_ADDR },
 #ifdef ENABLE_CDP
 	{ LLDPD_MODE_CDPV1, 0, "CDPv1", 'c', cdpv1_send, cdp_decode, cdpv1_guess,
@@ -72,23 +74,6 @@ static struct protocol protos[] =
 	  {0,0,0,0,0,0} }
 };
 
-static void		 lldpd_update_localchassis(struct lldpd *);
-static void		 lldpd_update_localports(struct lldpd *);
-static void		 lldpd_cleanup(struct lldpd *);
-static void		 lldpd_loop(struct lldpd *);
-static void		 lldpd_shutdown(int);
-static void		 lldpd_exit(void);
-static void		 lldpd_send_all(struct lldpd *);
-static void		 lldpd_recv_all(struct lldpd *);
-static int		 lldpd_guess_type(struct lldpd *, char *, int);
-static void		 lldpd_decode(struct lldpd *, char *, int,
-			    struct lldpd_hardware *);
-static void		 lldpd_update_chassis(struct lldpd_chassis *,
-			    const struct lldpd_chassis *);
-#ifdef ENABLE_LLDPMED
-static void		 lldpd_med(struct lldpd_chassis *);
-#endif
-
 static char		**saved_argv;
 #ifdef HAVE___PROGNAME
 extern const char	*__progname;
@@ -99,7 +84,50 @@ extern const char	*__progname;
 static void
 usage(void)
 {
-	fprintf(stderr, "usage: %s [options]\n", __progname);
+	fprintf(stderr, "Usage:   %s [OPTIONS ...]\n", __progname);
+	fprintf(stderr, "Version: %s\n", PACKAGE_STRING);
+
+	fprintf(stderr, "\n");
+
+	fprintf(stderr, "-d       Do not daemonize.\n");
+	fprintf(stderr, "-r       Receive-only mode\n");
+	fprintf(stderr, "-i       Disable LLDP-MED inventory TLV transmission.\n");
+	fprintf(stderr, "-k       Disable advertising of kernel release, version, machine.\n");
+	fprintf(stderr, "-S descr Override the default system description.\n");
+	fprintf(stderr, "-P name  Override the default hardware platform.\n");
+	fprintf(stderr, "-m IP    Specify the IPv4 management addresses of this system.\n");
+	fprintf(stderr, "-H mode  Specify the behaviour when detecting multiple neighbors.\n");
+	fprintf(stderr, "-I iface Limit interfaces to use.\n");
+#ifdef ENABLE_LLDPMED
+	fprintf(stderr, "-M class Enable emission of LLDP-MED frame. 'class' should be one of:\n");
+	fprintf(stderr, "             1 Generic Endpoint (Class I)\n");
+	fprintf(stderr, "             2 Media Endpoint (Class II)\n");
+	fprintf(stderr, "             3 Communication Device Endpoints (Class III)\n");
+	fprintf(stderr, "             4 Network Connectivity Device\n");
+#endif
+#ifdef USE_SNMP
+	fprintf(stderr, "-x       Enable SNMP subagent.\n");
+#endif
+	fprintf(stderr, "\n");
+
+#if defined ENABLE_CDP || defined ENABLE_EDP || defined ENABLE_FDP || defined ENABLE_SONMP
+	fprintf(stderr, "Additional protocol support.\n");
+#ifdef ENABLE_CDP
+	fprintf(stderr, "-c       Enable the support of CDP protocol. (Cisco)\n");
+#endif
+#ifdef ENABLE_EDP
+	fprintf(stderr, "-e       Enable the support of EDP protocol. (Extreme)\n");
+#endif
+#ifdef ENABLE_FDP
+	fprintf(stderr, "-f       Enable the support of FDP protocol. (Foundry)\n");
+#endif
+#ifdef ENABLE_SONMP
+	fprintf(stderr, "-s       Enable the support of SONMP protocol. (Nortel)\n");
+#endif
+
+	fprintf(stderr, "\n");
+#endif
+
 	fprintf(stderr, "see manual page lldpd(8) for more information\n");
 	exit(1);
 }
@@ -140,6 +168,8 @@ lldpd_alloc_hardware(struct lldpd *cfg, char *name)
 #endif
 #ifdef ENABLE_DOT1
 	TAILQ_INIT(&hardware->h_lport.p_vlans);
+	TAILQ_INIT(&hardware->h_lport.p_ppvids);
+	TAILQ_INIT(&hardware->h_lport.p_pids);
 #endif
 	return hardware;
 }
@@ -158,6 +188,33 @@ lldpd_vlan_cleanup(struct lldpd_port *port)
 		free(vlan);
 	}
 }
+
+void
+lldpd_ppvid_cleanup(struct lldpd_port *port)
+{
+	struct lldpd_ppvid *ppvid, *ppvid_next;
+	for (ppvid = TAILQ_FIRST(&port->p_ppvids);
+	    ppvid != NULL;
+	    ppvid = ppvid_next) {
+		ppvid_next = TAILQ_NEXT(ppvid, p_entries);
+		TAILQ_REMOVE(&port->p_ppvids, ppvid, p_entries);
+		free(ppvid);
+	}
+}
+
+void
+lldpd_pi_cleanup(struct lldpd_port *port)
+{
+	struct lldpd_pi *pi, *pi_next;
+	for (pi = TAILQ_FIRST(&port->p_pids);
+	    pi != NULL;
+	    pi = pi_next) {
+		free(pi->p_pi);
+		pi_next = TAILQ_NEXT(pi, p_entries);
+		TAILQ_REMOVE(&port->p_pids, pi, p_entries);
+		free(pi);
+	}
+}
 #endif
 
 /* If `all' is true, clear all information, including information that
@@ -173,6 +230,8 @@ lldpd_port_cleanup(struct lldpd *cfg, struct lldpd_port *port, int all)
 #endif
 #ifdef ENABLE_DOT1
 	lldpd_vlan_cleanup(port);
+	lldpd_ppvid_cleanup(port);
+	lldpd_pi_cleanup(port);
 #endif
 	free(port->p_id);
 	free(port->p_descr);
@@ -182,6 +241,45 @@ lldpd_port_cleanup(struct lldpd *cfg, struct lldpd_port *port, int all)
 			port->p_chassis->c_refcount--;
 			port->p_chassis = NULL;
 		}
+	}
+}
+
+struct lldpd_mgmt *
+lldpd_alloc_mgmt(int family, void *addrptr, size_t addrsize, u_int32_t iface)
+{
+	struct lldpd_mgmt *mgmt;
+	
+	if (family <= LLDPD_AF_UNSPEC || family >= LLDPD_AF_LAST) {
+		errno = EAFNOSUPPORT;
+		return NULL;
+	}
+	if (addrsize > LLDPD_MGMT_MAXADDRSIZE) {
+		errno = EOVERFLOW;
+		return NULL;
+	}
+	mgmt = calloc(1, sizeof(struct lldpd_mgmt));
+	if (mgmt == NULL) {
+		errno = ENOMEM;
+		return NULL;
+	}
+	mgmt->m_family = family;
+	assert(addrsize <= LLDPD_MGMT_MAXADDRSIZE);
+	memcpy(&mgmt->m_addr, addrptr, addrsize);
+	mgmt->m_addrsize = addrsize;
+	mgmt->m_iface = iface;
+	return mgmt;
+}
+
+void
+lldpd_chassis_mgmt_cleanup(struct lldpd_chassis *chassis)
+{
+	struct lldpd_mgmt *mgmt, *mgmt_next;
+	for (mgmt = TAILQ_FIRST(&chassis->c_mgmt);
+	     mgmt != NULL;
+	     mgmt = mgmt_next) {
+		mgmt_next = TAILQ_NEXT(mgmt, m_entries);
+		TAILQ_REMOVE(&chassis->c_mgmt, mgmt, m_entries);
+		free(mgmt);
 	}
 }
 
@@ -200,6 +298,7 @@ lldpd_chassis_cleanup(struct lldpd_chassis *chassis, int all)
 	free(chassis->c_id);
 	free(chassis->c_name);
 	free(chassis->c_descr);
+	lldpd_chassis_mgmt_cleanup(chassis);
 	if (all)
 		free(chassis);
 }
@@ -274,6 +373,26 @@ lldpd_cleanup(struct lldpd *cfg)
 	}
 }
 
+/* Update chassis `ochassis' with values from `chassis'. */
+static void
+lldpd_update_chassis(struct lldpd_chassis *ochassis,
+    const struct lldpd_chassis *chassis) {
+	TAILQ_ENTRY(lldpd_chassis) entries;
+	/* We want to keep refcount, index and list stuff from the current
+	 * chassis */
+	int refcount = ochassis->c_refcount;
+	int index = ochassis->c_index;
+	memcpy(&entries, &ochassis->c_entries,
+	    sizeof(entries));
+	/* Make the copy */
+	lldpd_chassis_cleanup(ochassis, 0);
+	memcpy(ochassis, chassis, sizeof(struct lldpd_chassis));
+	/* Restore saved values */
+	ochassis->c_refcount = refcount;
+	ochassis->c_index = index;
+	memcpy(&ochassis->c_entries, &entries, sizeof(entries));
+}
+
 static int
 lldpd_guess_type(struct lldpd *cfg, char *frame, int s)
 {
@@ -303,10 +422,16 @@ lldpd_decode(struct lldpd *cfg, char *frame, int s,
 	struct lldpd_port *port, *oport = NULL;
 	int guess = LLDPD_MODE_LLDP;
 
-	/* Discard VLAN frames */
-	if ((s >= sizeof(struct ethhdr)) &&
-	    (((struct ethhdr*)frame)->h_proto == htons(ETHERTYPE_VLAN)))
+	if (s < sizeof(struct ethhdr) + 4)
+		/* Too short, just discard it */
 		return;
+	/* Decapsulate VLAN frames */
+	if (((struct ethhdr*)frame)->h_proto == htons(ETHERTYPE_VLAN)) {
+		/* VLAN decapsulation means to shift 4 bytes left the frame from
+		 * offset 2*ETH_ALEN */
+		memmove(frame + 2*ETH_ALEN, frame + 2*ETH_ALEN + 4, s - 2*ETH_ALEN);
+		s -= 4;
+	}
 
 	TAILQ_FOREACH(oport, &hardware->h_rports, p_entries) {
 		if ((oport->p_lastframe != NULL) &&
@@ -332,7 +457,8 @@ lldpd_decode(struct lldpd *cfg, char *frame, int s,
 			}
 	}
 	if (cfg->g_protocols[i].mode == 0) {
-		LLOG_INFO("unable to guess frame type");
+		LLOG_INFO("unable to guess frame type on %s",
+		    hardware->h_ifname);
 		return;
 	}
 
@@ -403,30 +529,123 @@ lldpd_decode(struct lldpd *cfg, char *frame, int s,
 	   freed with lldpd_port_cleanup() and therefore, the refcount
 	   of the chassis that was attached to it is decreased.
 	*/
-	i = 0; TAILQ_FOREACH(oport, &hardware->h_rports, p_entries) i++;
-	LLOG_DEBUG("Currently, %s known %d neighbors",
+	i = 0; TAILQ_FOREACH(oport, &hardware->h_rports, p_entries)
+		i++;
+	LLOG_DEBUG("Currently, %s knows %d neighbors",
 	    hardware->h_ifname, i);
 	return;
 }
 
-/* Update chassis `ochassis' with values from `chassis'. */
-static void
-lldpd_update_chassis(struct lldpd_chassis *ochassis,
-    const struct lldpd_chassis *chassis) {
-	TAILQ_ENTRY(lldpd_chassis) entries;
-	/* We want to keep refcount, index and list stuff from the current
-	 * chassis */
-	int refcount = ochassis->c_refcount;
-	int index = ochassis->c_index;
-	memcpy(&entries, &ochassis->c_entries,
-	    sizeof(entries));
-	/* Make the copy */
-	lldpd_chassis_cleanup(ochassis, 0);
-	memcpy(ochassis, chassis, sizeof(struct lldpd_chassis));
-	/* Restore saved values */
-	ochassis->c_refcount = refcount;
-	ochassis->c_index = index;
-	memcpy(&ochassis->c_entries, &entries, sizeof(entries));
+/* Get the output of lsb_release -s -d.  This is a slow function. It should be
+   called once. It return NULL if any problem happens. Otherwise, this is a
+   statically allocated buffer. The result includes the trailing \n  */
+static char *
+lldpd_get_lsb_release() {
+	static char release[1024];
+	char *const command[] = { "lsb_release", "-s", "-d", NULL };
+	int pid, status, devnull, count;
+	int pipefd[2];
+
+	if (pipe(pipefd)) {
+		LLOG_WARN("unable to get a pair of pipes");
+		return NULL;
+	}
+
+	if ((pid = fork()) < 0) {
+		LLOG_WARN("unable to fork");
+		return NULL;
+	}
+	switch (pid) {
+	case 0:
+		/* Child, exec lsb_release */
+		close(pipefd[0]);
+		if ((devnull = open("/dev/null", O_RDWR, 0)) != -1) {
+			dup2(devnull, STDIN_FILENO);
+			dup2(devnull, STDERR_FILENO);
+			dup2(pipefd[1], STDOUT_FILENO);
+			if (devnull > 2) close(devnull);
+			if (pipefd[1] > 2) close(pipefd[1]);
+			execvp("lsb_release", command);
+		}
+		exit(127);
+		break;
+	default:
+		/* Father, read the output from the children */
+		close(pipefd[1]);
+		count = 0;
+		do {
+			status = read(pipefd[0], release+count, sizeof(release)-count);
+			if ((status == -1) && (errno == EINTR)) continue;
+			if (status > 0)
+				count += status;
+		} while (count < sizeof(release) && (status > 0));
+		if (status < 0) {
+			LLOG_WARN("unable to read from lsb_release");
+			close(pipefd[0]);
+			waitpid(pid, &status, 0);
+			return NULL;
+		}
+		close(pipefd[0]);
+		if (count >= sizeof(release)) {
+			LLOG_INFO("output of lsb_release is too large");
+			waitpid(pid, &status, 0);
+			return NULL;
+		}
+		status = -1;
+		if (waitpid(pid, &status, 0) != pid)
+			return NULL;
+		if (!WIFEXITED(status) || (WEXITSTATUS(status) != 0)) {
+			LLOG_INFO("lsb_release information not available");
+			return NULL;
+		}
+		if (!count) {
+			LLOG_INFO("lsb_release returned an empty string");
+			return NULL;
+		}
+		release[count] = '\0';
+		return release;
+	}
+	/* Should not be here */
+	return NULL;
+}
+
+/* Same like lldpd_get_lsb_release but reads /etc/os-release for PRETTY_NAME=. */
+static char *
+lldpd_get_os_release() {
+	static char release[1024];
+	char line[1024];
+	char *key, *val;
+	char *ptr1 = release;
+	char *ptr2 = release;
+
+	FILE *fp = fopen("/etc/os-release", "r");
+	if (!fp) {
+		LLOG_WARN("could not open /etc/os-release");
+		return NULL;
+	}
+
+	while ((fgets(line, 1024, fp) != NULL)) {
+		key = strtok(line, "=");
+		val = strtok(NULL, "=");
+
+		if (strncmp(key, "PRETTY_NAME", 1024) == 0) {
+			strncpy(release, val, 1024);
+			break;
+		}
+	}
+	fclose(fp);
+
+	/* Remove trailing newline and all " in the string. */
+	while (*ptr1 != 0) {
+		if ((*ptr1 == '"') || (*ptr1 == '\n')) {
+			++ptr1;
+		} else {
+			*ptr2++ = *ptr1++;
+		}
+	}
+	*ptr2 = 0;
+
+	return release;
 }
 
 int
@@ -461,6 +680,109 @@ lldpd_callback_del(struct lldpd *cfg, int fd, void(*fn)(CALLBACK_SIG))
 }
 
 static void
+lldpd_hide_ports(struct lldpd *cfg, struct lldpd_hardware *hardware, int mask) {
+	struct lldpd_port *port;
+	int protocols[LLDPD_MODE_MAX+1];
+	char buffer[256];
+	int i, j, k, found;
+	unsigned int min;
+
+	/* Compute the number of occurrences of each protocol */
+	for (i = 0; i <= LLDPD_MODE_MAX; i++) protocols[i] = 0;
+	TAILQ_FOREACH(port, &hardware->h_rports, p_entries)
+		protocols[port->p_protocol]++;
+
+	/* Turn the protocols[] array into an array of
+	   enabled/disabled protocols. 1 means enabled, 0
+	   means disabled. */
+	min = (unsigned int)-1;
+	for (i = 0; i <= LLDPD_MODE_MAX; i++)
+		if (protocols[i] && (protocols[i] < min))
+			min = protocols[i];
+	found = 0;
+	for (i = 0; i <= LLDPD_MODE_MAX; i++)
+		if ((protocols[i] == min) && !found) {
+			/* If we need a tie breaker, we take
+			   the first protocol only */
+			if (cfg->g_smart & mask &
+			    (SMART_OUTGOING_ONE_PROTO | SMART_INCOMING_ONE_PROTO))
+				found = 1;
+			protocols[i] = 1;
+		} else protocols[i] = 0;
+
+	/* We set the p_hidden flag to 1 if the protocol is disabled */
+	TAILQ_FOREACH(port, &hardware->h_rports, p_entries) {
+		if (mask == SMART_OUTGOING)
+			port->p_hidden_out = protocols[port->p_protocol]?0:1;
+		else
+			port->p_hidden_in = protocols[port->p_protocol]?0:1;
+	}
+
+	/* If we want only one neighbor, we take the first one */
+	if (cfg->g_smart & mask &
+	    (SMART_OUTGOING_ONE_NEIGH | SMART_INCOMING_ONE_NEIGH)) {
+		found = 0;
+		TAILQ_FOREACH(port, &hardware->h_rports, p_entries) {
+			if (mask == SMART_OUTGOING) {
+				if (found) port->p_hidden_out = 1;
+				if (!port->p_hidden_out)
+					found = 1;
+			}
+			if (mask == SMART_INCOMING) {
+				if (found) port->p_hidden_in = 1;
+				if (!port->p_hidden_in)
+					found = 1;
+			}
+		}
+	}
+
+	/* Print a debug message summarizing the operation */
+	for (i = 0; i <= LLDPD_MODE_MAX; i++) protocols[i] = 0;
+	k = j = 0;
+	TAILQ_FOREACH(port, &hardware->h_rports, p_entries) {
+		if (!(((mask == SMART_OUTGOING) && port->p_hidden_out) ||
+		      ((mask == SMART_INCOMING) && port->p_hidden_in))) {
+			k++;
+			protocols[port->p_protocol] = 1;
+		}
+		j++;
+	}
+	buffer[0] = '\0';
+	for (i=0; cfg->g_protocols[i].mode != 0; i++) {
+		if (cfg->g_protocols[i].enabled && protocols[cfg->g_protocols[i].mode]) {
+			if (strlen(buffer) +
+			    strlen(cfg->g_protocols[i].name) + 3 > sizeof(buffer)) {
+				/* Unlikely, our buffer is too small */
+				memcpy(buffer + sizeof(buffer) - 4, "...", 4);
+				break;
+			}
+			if (buffer[0])
+				strcat(buffer, ", ");
+			strcat(buffer, cfg->g_protocols[i].name);
+		}
+	}
+	LLOG_DEBUG("[%s] %s: %d visible neigh / %d. Protocols: %s.",
+		   (mask == SMART_OUTGOING)?"out filter":"in filter",
+		   hardware->h_ifname, k, j, buffer[0]?buffer:"(none)");
+}
+
+/* Hide unwanted ports depending on smart mode set by the user */
+static void
+lldpd_hide_all(struct lldpd *cfg)
+{
+	struct lldpd_hardware *hardware;
+
+	if (!cfg->g_smart)
+		return;
+	TAILQ_FOREACH(hardware, &cfg->g_hardware, h_entries) {
+		if (cfg->g_smart & SMART_INCOMING_FILTER)
+			lldpd_hide_ports(cfg, hardware, SMART_INCOMING);
+		if (cfg->g_smart & SMART_OUTGOING_FILTER)
+			lldpd_hide_ports(cfg, hardware, SMART_OUTGOING);
+	}
+}
+
+static void
 lldpd_recv_all(struct lldpd *cfg)
 {
 	struct lldpd_hardware *hardware;
@@ -468,8 +790,8 @@ lldpd_recv_all(struct lldpd *cfg)
 	fd_set rfds;
 	struct timeval tv;
 #ifdef USE_SNMP
-	int fakeblock = 0;
-	struct timeval *tvp = &tv;
+	struct timeval snmptv;
+	int snmpblock = 0;
 #endif
 	int rc, nfds, n;
 	char *buffer;
@@ -477,7 +799,9 @@ lldpd_recv_all(struct lldpd *cfg)
 	do {
 		tv.tv_sec = cfg->g_delay - (time(NULL) - cfg->g_lastsent);
 		if (tv.tv_sec < 0)
-			tv.tv_sec = LLDPD_TX_DELAY;
+			/* We did not send packets in a long time,
+			   just give up receive for now. */
+			break;
 		if (tv.tv_sec >= cfg->g_delay)
 			tv.tv_sec = cfg->g_delay;
 		tv.tv_usec = 0;
@@ -505,8 +829,13 @@ lldpd_recv_all(struct lldpd *cfg)
 		}
 		
 #ifdef USE_SNMP
-		if (cfg->g_snmp)
-			snmp_select_info(&nfds, &rfds, tvp, &fakeblock);
+		if (cfg->g_snmp) {
+			snmpblock = 0;
+			memcpy(&snmptv, &tv, sizeof(struct timeval));
+			snmp_select_info(&nfds, &rfds, &snmptv, &snmpblock);
+			if (snmpblock == 0)
+				memcpy(&tv, &snmptv, sizeof(struct timeval));
+		}
 #endif /* USE_SNMP */
 		if (nfds == -1) {
 			sleep(cfg->g_delay);
@@ -545,6 +874,7 @@ lldpd_recv_all(struct lldpd *cfg)
 			}
 			hardware->h_rx_cnt++;
 			lldpd_decode(cfg, buffer, n, hardware);
+			lldpd_hide_all(cfg); /* Immediatly hide */
 			free(buffer);
 			break;
 		}
@@ -574,6 +904,7 @@ lldpd_send_all(struct lldpd *cfg)
 	int i, sent;
 
 	cfg->g_lastsent = time(NULL);
+	if (cfg->g_receiveonly) return;
 	TAILQ_FOREACH(hardware, &cfg->g_hardware, h_entries) {
 		/* Ignore if interface is down */
 		if ((hardware->h_flags & IFF_RUNNING) == 0)
@@ -584,13 +915,22 @@ lldpd_send_all(struct lldpd *cfg)
 			if (!cfg->g_protocols[i].enabled)
 				continue;
 			/* We send only if we have at least one remote system
-			 * speaking this protocol */
+			 * speaking this protocol or if the protocol is forced */
+			if (cfg->g_protocols[i].enabled > 1) {
+				cfg->g_protocols[i].send(cfg, hardware);
+				sent++;
+				continue;
+			}
 			TAILQ_FOREACH(port, &hardware->h_rports, p_entries) {
+				/* If this remote port is disabled, we don't
+				 * consider it */
+				if (port->p_hidden_out)
+					continue;
 				if (port->p_protocol ==
 				    cfg->g_protocols[i].mode) {
 					cfg->g_protocols[i].send(cfg,
 					    hardware);
-					sent = 1;
+					sent++;
 					break;
 				}
 			}
@@ -607,18 +947,18 @@ lldpd_send_all(struct lldpd *cfg)
 static void
 lldpd_med(struct lldpd_chassis *chassis)
 {
-	free(chassis->c_med_hw);
-	free(chassis->c_med_fw);
-	free(chassis->c_med_sn);
-	free(chassis->c_med_manuf);
-	free(chassis->c_med_model);
-	free(chassis->c_med_asset);
-	chassis->c_med_hw = dmi_hw();
-	chassis->c_med_fw = dmi_fw();
-	chassis->c_med_sn = dmi_sn();
-	chassis->c_med_manuf = dmi_manuf();
-	chassis->c_med_model = dmi_model();
-	chassis->c_med_asset = dmi_asset();
+#if __i386__ || __amd64__
+	static short int once = 0;
+	if (!once) {
+		chassis->c_med_hw = dmi_hw();
+		chassis->c_med_fw = dmi_fw();
+		chassis->c_med_sn = dmi_sn();
+		chassis->c_med_manuf = dmi_manuf();
+		chassis->c_med_model = dmi_model();
+		chassis->c_med_asset = dmi_asset();
+		once = 1;
+	}
+#endif
 }
 #endif
 
@@ -629,7 +969,6 @@ lldpd_update_localchassis(struct lldpd *cfg)
 	char *hp;
 	int f;
 	char status;
-	struct lldpd_hardware *hardware;
 
 	/* Set system name and description */
 	if (uname(&un) != 0)
@@ -646,13 +985,14 @@ lldpd_update_localchassis(struct lldpd *cfg)
 			fatal("failed to set full system description");
         } else {
 	        if (cfg->g_advertise_version) {
-		        if (asprintf(&LOCAL_CHASSIS(cfg)->c_descr, "%s %s %s %s",
-			        un.sysname, un.release, un.version, un.machine) 
+		        if (asprintf(&LOCAL_CHASSIS(cfg)->c_descr, "%s %s %s %s %s",
+			        cfg->g_lsb_release?cfg->g_lsb_release:"",
+				un.sysname, un.release, un.version, un.machine)
                                 == -1)
 			        fatal("failed to set full system description");
 	        } else {
-		        if (asprintf(&LOCAL_CHASSIS(cfg)->c_descr, "%s", 
-                                un.sysname) == -1)
+		        if (asprintf(&LOCAL_CHASSIS(cfg)->c_descr, "%s",
+                                cfg->g_lsb_release?cfg->g_lsb_release:un.sysname) == -1)
 			        fatal("failed to set minimal system description");
 	        }
         }
@@ -676,16 +1016,15 @@ lldpd_update_localchassis(struct lldpd *cfg)
 		LOCAL_CHASSIS(cfg)->c_med_sw = strdup("Unknown");
 #endif
 
-	/* Set chassis ID if needed */
-	if ((LOCAL_CHASSIS(cfg)->c_id == NULL) &&
-	    (hardware = TAILQ_FIRST(&cfg->g_hardware))) {
-		if ((LOCAL_CHASSIS(cfg)->c_id =
-			malloc(sizeof(hardware->h_lladdr))) == NULL)
+	/* Set chassis ID if needed. This is only done if chassis ID
+	   has not been set previously (with the MAC address of an
+	   interface for example)
+	*/
+	if (LOCAL_CHASSIS(cfg)->c_id == NULL) {
+		if (!(LOCAL_CHASSIS(cfg)->c_id = strdup(LOCAL_CHASSIS(cfg)->c_name)))
 			fatal(NULL);
-		LOCAL_CHASSIS(cfg)->c_id_subtype = LLDP_CHASSISID_SUBTYPE_LLADDR;
-		LOCAL_CHASSIS(cfg)->c_id_len = sizeof(hardware->h_lladdr);
-		memcpy(LOCAL_CHASSIS(cfg)->c_id,
-		    hardware->h_lladdr, sizeof(hardware->h_lladdr));
+		LOCAL_CHASSIS(cfg)->c_id_len = strlen(LOCAL_CHASSIS(cfg)->c_name);
+		LOCAL_CHASSIS(cfg)->c_id_subtype = LLDP_CHASSISID_SUBTYPE_LOCAL;
 	}
 }
 
@@ -695,12 +1034,14 @@ lldpd_update_localports(struct lldpd *cfg)
 	struct ifaddrs *ifap;
 	struct lldpd_hardware *hardware;
 	lldpd_ifhandlers ifhs[] = {
+		lldpd_ifh_whitelist, /* Is the interface whitelisted? */
 		lldpd_ifh_bond,	/* Handle bond */
 		lldpd_ifh_eth,	/* Handle classic ethernet interfaces */
 #ifdef ENABLE_DOT1
 		lldpd_ifh_vlan,	/* Handle VLAN */
 #endif
 		lldpd_ifh_mgmt,	/* Handle management address (if not already handled) */
+		lldpd_ifh_chassis, /* Handle chassis ID (if not already handled) */
 		NULL
 	};
 	lldpd_ifhandlers *ifh;
@@ -711,7 +1052,6 @@ lldpd_update_localports(struct lldpd *cfg)
 	TAILQ_FOREACH(hardware, &cfg->g_hardware, h_entries)
 	    hardware->h_flags = 0;
 
-	LOCAL_CHASSIS(cfg)->c_mgmt.s_addr = INADDR_ANY;
 	if (getifaddrs(&ifap) != 0)
 		fatal("lldpd_update_localports: failed to get interface list");
 
@@ -738,6 +1078,7 @@ lldpd_loop(struct lldpd *cfg)
 	   3. Update local chassis information
 	   4. Send packets
 	   5. Receive packets
+	   6. Update smart mode
 	*/
 	LOCAL_CHASSIS(cfg)->c_cap_enabled = 0;
 	lldpd_update_localports(cfg);
@@ -774,6 +1115,42 @@ lldpd_exit()
 #endif /* USE_SNMP */
 }
 
+struct intint { int a; int b; };
+static const struct intint filters[] = {
+	{  0, 0 },
+	{  1, SMART_INCOMING_FILTER | SMART_INCOMING_ONE_PROTO |
+	      SMART_OUTGOING_FILTER | SMART_OUTGOING_ONE_PROTO },
+	{  2, SMART_INCOMING_FILTER | SMART_INCOMING_ONE_PROTO },
+	{  3, SMART_OUTGOING_FILTER | SMART_OUTGOING_ONE_PROTO },
+	{  4, SMART_INCOMING_FILTER | SMART_OUTGOING_FILTER },
+	{  5, SMART_INCOMING_FILTER },
+	{  6, SMART_OUTGOING_FILTER },
+	{  7, SMART_INCOMING_FILTER | SMART_INCOMING_ONE_PROTO | SMART_INCOMING_ONE_NEIGH |
+	      SMART_OUTGOING_FILTER | SMART_OUTGOING_ONE_PROTO },
+	{  8, SMART_INCOMING_FILTER | SMART_INCOMING_ONE_PROTO | SMART_INCOMING_ONE_NEIGH },
+	{  9, SMART_INCOMING_FILTER | SMART_INCOMING_ONE_NEIGH |
+	      SMART_OUTGOING_FILTER | SMART_OUTGOING_ONE_PROTO },
+	{ 10, SMART_OUTGOING_FILTER | SMART_OUTGOING_ONE_NEIGH },
+	{ 11, SMART_INCOMING_FILTER | SMART_INCOMING_ONE_NEIGH },
+	{ 12, SMART_INCOMING_FILTER | SMART_INCOMING_ONE_NEIGH |
+	      SMART_OUTGOING_FILTER | SMART_OUTGOING_ONE_NEIGH },
+	{ 13, SMART_INCOMING_FILTER | SMART_INCOMING_ONE_NEIGH |
+	      SMART_OUTGOING_FILTER },
+	{ 14, SMART_INCOMING_FILTER | SMART_INCOMING_ONE_PROTO |
+	      SMART_OUTGOING_FILTER | SMART_OUTGOING_ONE_NEIGH },
+	{ 15, SMART_INCOMING_FILTER | SMART_INCOMING_ONE_PROTO |
+	      SMART_OUTGOING_FILTER },
+	{ 16, SMART_INCOMING_FILTER | SMART_INCOMING_ONE_PROTO | SMART_INCOMING_ONE_NEIGH |
+	      SMART_OUTGOING_FILTER | SMART_OUTGOING_ONE_NEIGH },
+	{ 17, SMART_INCOMING_FILTER | SMART_INCOMING_ONE_PROTO | SMART_INCOMING_ONE_NEIGH |
+	      SMART_OUTGOING_FILTER },
+	{ 18, SMART_INCOMING_FILTER |
+	      SMART_OUTGOING_FILTER | SMART_OUTGOING_ONE_NEIGH },
+	{ 19, SMART_INCOMING_FILTER |
+	      SMART_OUTGOING_FILTER | SMART_OUTGOING_ONE_PROTO },
+	{ -1, 0 }
+};
+
 int
 lldpd_main(int argc, char *argv[])
 {
@@ -785,19 +1162,19 @@ lldpd_main(int argc, char *argv[])
 	char *agentx = NULL;	/* AgentX socket */
 #endif
 	char *mgmtp = NULL;
+	char *cidp = NULL;
+	char *interfaces = NULL;
 	char *popt, opts[] = 
-#ifdef ENABLE_LISTENVLAN
-		"v"
-#endif
-		"kdxX:m:p:M:S:i@                    ";
+		"H:hkrdxX:m:4:6:I:C:p:M:P:S:i@                    ";
 	int i, found, advertise_version = 1;
-#ifdef ENABLE_LISTENVLAN
-	int vlan = 0;
-#endif
 #ifdef ENABLE_LLDPMED
 	int lldpmed = 0, noinventory = 0;
 #endif
-        char *descr_override = NULL;
+	char *descr_override = NULL;
+	char *platform_override = NULL;
+	char *lsb_release = NULL;
+	int smart = 15;
+	int receiveonly = 0;
 
 	saved_argv = argv;
 
@@ -805,23 +1182,28 @@ lldpd_main(int argc, char *argv[])
 	 * Get and parse command line options
 	 */
 	popt = strchr(opts, '@');
-	for (i=0; protos[i].mode != 0; i++) {
-		if (protos[i].enabled == 1) continue;
+	for (i=0; protos[i].mode != 0; i++)
 		*(popt++) = protos[i].arg;
-	}
 	*popt = '\0';
 	while ((ch = getopt(argc, argv, opts)) != -1) {
 		switch (ch) {
-#ifdef ENABLE_LISTENVLAN
-		case 'v':
-			vlan = 1;
+		case 'h':
+			usage();
 			break;
-#endif
 		case 'd':
 			debug++;
 			break;
+		case 'r':
+			receiveonly = 1;
+			break;
 		case 'm':
 			mgmtp = optarg;
+			break;
+		case 'I':
+			interfaces = optarg;
+			break;
+		case 'C':
+			cidp = optarg;
 			break;
 		case 'k':
 			advertise_version = 0;
@@ -840,7 +1222,6 @@ lldpd_main(int argc, char *argv[])
 #else
 		case 'M':
 		case 'i':
-		case 'P':
 			fprintf(stderr, "LLDP-MED support is not built-in\n");
 			usage();
 			break;
@@ -863,12 +1244,22 @@ lldpd_main(int argc, char *argv[])
                 case 'S':
                         descr_override = strdup(optarg);
                         break;
+		case 'P':
+			platform_override = strdup(optarg);
+			break;
+		case 'H':
+			smart = atoi(optarg);
+			break;
 		default:
 			found = 0;
 			for (i=0; protos[i].mode != 0; i++) {
-				if (protos[i].enabled) continue;
 				if (ch == protos[i].arg) {
-					protos[i].enabled = 1;
+					protos[i].enabled++;
+					/* When an argument enable
+					   several protocols, only the
+					   first one can be forced. */
+					if (found && protos[i].enabled > 1)
+						protos[i].enabled = 1;
 					found = 1;
 				}
 			}
@@ -876,6 +1267,14 @@ lldpd_main(int argc, char *argv[])
 				usage();
 		}
 	}
+
+	/* Set correct smart mode */
+	for (i=0; (filters[i].a != -1) && (filters[i].a != smart); i++);
+	if (filters[i].a == -1) {
+		fprintf(stderr, "Incorrect mode for -H\n");
+		usage();
+	}
+	smart = filters[i].b;
 	
 	log_init(debug, __progname);
 	tzset();		/* Get timezone info before chroot */
@@ -896,6 +1295,13 @@ lldpd_main(int argc, char *argv[])
 		close(pid);
 	}
 
+	/* Try to read system information from /etc/os-release if possible.
+	   Fall back to lsb_release for compatibility. */
+	lsb_release = lldpd_get_os_release();
+	if (!lsb_release) {
+		lsb_release = lldpd_get_lsb_release();
+	}
+
 	priv_init(PRIVSEP_CHROOT);
 
 	if ((cfg = (struct lldpd *)
@@ -903,18 +1309,26 @@ lldpd_main(int argc, char *argv[])
 		fatal(NULL);
 
 	cfg->g_mgmt_pattern = mgmtp;
-	cfg->g_advertise_version = advertise_version;
-#ifdef ENABLE_LISTENVLAN
-	cfg->g_listen_vlans = vlan;
-#endif
+	cfg->g_cid_pattern = cidp;
+	cfg->g_interfaces = interfaces;
+	cfg->g_smart = smart;
+	cfg->g_receiveonly = receiveonly;
 
 	/* Get ioctl socket */
 	if ((cfg->g_sock = socket(AF_INET, SOCK_DGRAM, 0)) == -1)
 		fatal("failed to get ioctl socket");
 	cfg->g_delay = LLDPD_TX_DELAY;
 
+	/* Description */
+	if (!(cfg->g_advertise_version = advertise_version) && lsb_release)
+		/* Remove the \n */
+		lsb_release[strlen(lsb_release) - 1] = '\0';
+	cfg->g_lsb_release = lsb_release;
         if (descr_override)
            cfg->g_descr_override = descr_override;
+
+	if (platform_override)
+		cfg->g_platform_override = platform_override;
 
 	/* Set system capabilities */
 	if ((lchassis = (struct lldpd_chassis*)
@@ -922,13 +1336,15 @@ lldpd_main(int argc, char *argv[])
 		fatal(NULL);
 	lchassis->c_cap_available = LLDP_CAP_BRIDGE | LLDP_CAP_WLAN |
 	    LLDP_CAP_ROUTER;
+	TAILQ_INIT(&lchassis->c_mgmt);
 #ifdef ENABLE_LLDPMED
 	if (lldpmed > 0) {
 		if (lldpmed == LLDPMED_CLASS_III)
 			lchassis->c_cap_available |= LLDP_CAP_TELEPHONE;
 		lchassis->c_med_type = lldpmed;
 		lchassis->c_med_cap_available = LLDPMED_CAP_CAP |
-		    LLDPMED_CAP_IV | LLDPMED_CAP_LOCATION;
+		    LLDPMED_CAP_IV | LLDPMED_CAP_LOCATION |
+		    LLDPMED_CAP_POLICY | LLDPMED_CAP_MDI_PSE | LLDPMED_CAP_MDI_PD;
 		cfg->g_noinventory = noinventory;
 	} else
 		cfg->g_noinventory = 1;
@@ -939,9 +1355,11 @@ lldpd_main(int argc, char *argv[])
 
 	cfg->g_protocols = protos;
 	for (i=0; protos[i].mode != 0; i++)
-		if (protos[i].enabled) {
+		if (protos[i].enabled > 1)
+			LLOG_INFO("protocol %s enabled and forced", protos[i].name);
+		else if (protos[i].enabled)
 			LLOG_INFO("protocol %s enabled", protos[i].name);
-		} else
+		else
 			LLOG_INFO("protocol %s disabled", protos[i].name);
 
 	TAILQ_INIT(&cfg->g_hardware);

@@ -1,3 +1,87 @@
+lldpd (0.6)
+  * Features:
+    + Allow lldpctl to display hidden ports.
+    + Add a switch to specify interfaces to use to get chassis ID.
+    + Support for multiple management addresses and IPv6 management
+      addresses. Contributed by João Valverde.
+  * Global changes:
+    + Partial rewrite of the SNMP part. Less code.
+    + Unit tests for SNMP.
+    + Major rewrite of the protocol between lldpd and lldpctl. Less
+      code.
+  * Fixes:
+    + Several small SNMP fixes (discovered by unit tests).
+
+lldpd (0.5.7)
+ * Fixes:
+    + Configure issue with NetSNMP and some linkers
+    + Fix infinite loop for the receive part: on certain conditions,
+      lldpd will stop sending packets and stop updating local data.
+
+lldpd (0.5.6)
+  * Features:
+    + Send and receive native VLAN TLV with CDP
+    + Add a whitelist for some drivers (currently: dsa and veth)
+  * Fixes:
+    + Compilation issues with NetSNMP 5.7 (and with earlier versions too)
+    + Small optimization of BPF filter
+
+lldpd (0.5.5)
+  * Features:
+    + Support for PPVID and PI Dot1 TLV, thanks to Shuah Khan.
+    + Extend whitelist with possibility to blacklist.
+  * Fixes:
+    + Key/value output was incorrect when a dot was present in
+      interface names. This is fixed but it is preferable to use XML
+      output since the parsing is more difficult in this case.
+    + Only grab DMI information once. Only uses DMI for x86 platform.
+    + Padding issues with socket protocol. This introduces a change in
+      the socket protocol!
+    + Fix a segfault when neither /etc/os-release nor lsb_release
+      are available.
+
+lldpd (0.5.4)
+  * Features:
+    + Get OS information from /etc/os-release if available. Patch from
+      Michael Tremer.
+    + Add a flag to specify which interfaces lldpd should listen to.
+
+lldpd (0.5.3)
+  * Fixes:
+    + Allow root to change configuration of lldpd when lldpctl has suid set.
+  * Features:
+    + Handle Dot3 POE-MDI TLV (802.3af and 802.3at).
+    + Allow to set Dot3 POE-MDI from lldpctl.
+
+lldpd (0.5.2)
+  * Features:
+    + More flexible smart mode and new default. Manual page has been updated.
+    + Add a "receive-only" mode with "-r" switch.
+
+lldpd (0.5.1)
+  * Features:
+    + Allow to force a protocol even when no peer for this protocol is
+      detected.
+    + Add a smart mode that allows to discard bogus port information,
+      for example CDP packets that are flooded through a switch that
+      does not support CDP.
+    + Allow to set LLDP-MED network policy from lldpctl, thanks to a patch from
+      Philipp Kempgen.
+    + Allow to set LLDP-MED POE-MDI from lldpctl.
+    + Add a summary of available options in "lldpd -h" and "lldpctl -h",
+      thanks to a patch from Jorge Boncompte.
+    + Add a new output (keyvalue) for lldpctl.
+    + Listen on VLAN using an appropriate BPF filter, VLAN
+      decapsulation. Older "listen on vlan" feature is discarded. See
+      README for more information on the new feature.
+    + Use output of lsb_release if available for system description.
+
+  * Fixes:
+    + Ignore interface with no queue. It should filter out interfaces
+      like "vnet0" that would fail if we try to send something on them.
+    + Don't check CDP checksums (not really a fix but it appears that
+      Cisco checksum have some difficult corner cases).
+
 lldpd (0.5.0)
 
   * Features:

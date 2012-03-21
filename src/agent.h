@@ -14,24 +14,15 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#ifndef _SONMP_H
-#define _SONMP_H
+#ifndef _AGENT_H
+#define _AGENT_H
 
-#define SONMP_MULTICAST_ADDR	{						\
-	0x01, 0x00, 0x81, 0x00, 0x01, 0x00					\
-}
-#define LLC_ORG_NORTEL { 0x00, 0x00, 0x81 }
-#define LLC_PID_SONMP_HELLO 0x01a2
-#define LLC_PID_SONMP_FLATNET 0x01a1
-#define SONMP_SIZE (2*ETH_ALEN + sizeof(u_int16_t) + 8)
+#include <net-snmp/net-snmp-config.h>
+#include <net-snmp/net-snmp-includes.h>
+#include <net-snmp/agent/net-snmp-agent-includes.h>
+#include <net-snmp/agent/snmp_vars.h>
 
-struct sonmp_chassis {
-	int type;
-	char *description;
-};
+static oid lldp_oid[] = {1, 0, 8802, 1, 1, 2};
+size_t agent_lldp_vars_size(void);
 
-#define SONMP_TOPOLOGY_CHANGED 1
-#define SONMP_TOPOLOGY_UNCHANGED 2
-#define SONMP_TOPOLOGY_NEW 3
-
-#endif /* _SONMP_H */
+#endif

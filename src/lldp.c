@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2008 Vincent Bernat <bernat@luffy.cx>
  *
- * Permission to use, copy, modify, and distribute this software for any
+ * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
  * copyright notice and this permission notice appear in all copies.
  *
@@ -19,12 +19,39 @@
 
 #include <unistd.h>
 #include <errno.h>
+#include <assert.h>
 #include <time.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <netpacket/packet.h>
 #include <linux/sockios.h>
+
+inline static int
+lldpd_af_to_lldp_proto(int af)
+{
+	switch (af) {
+	case LLDPD_AF_IPV4:
+		return LLDP_MGMT_ADDR_IP4;
+	case LLDPD_AF_IPV6:
+		return LLDP_MGMT_ADDR_IP6;
+	default:
+		return LLDP_MGMT_ADDR_NONE;
+	}
+}
+
+inline static int
+lldpd_af_from_lldp_proto(int proto)
+{
+	switch (proto) {
+	case LLDP_MGMT_ADDR_IP4:
+		return LLDPD_AF_IPV4;
+	case LLDP_MGMT_ADDR_IP6:
+		return LLDPD_AF_IPV6;
+	default:
+		return LLDPD_AF_UNSPEC;
+	}
+}
 
 int
 lldp_send(struct lldpd *global,
@@ -35,11 +62,15 @@ lldp_send(struct lldpd *global,
 	struct lldpd_frame *frame;
 	int length;
 	u_int8_t *packet, *pos, *tlv;
+	struct lldpd_mgmt *mgmt;
+	int proto;
 
 	u_int8_t mcastaddr[] = LLDP_MULTICAST_ADDR;
 #ifdef ENABLE_DOT1
 	const u_int8_t dot1[] = LLDP_TLV_ORG_DOT1;
 	struct lldpd_vlan *vlan;
+	struct lldpd_ppvid *ppvid;
+	struct lldpd_pi *pi;
 #endif
 #ifdef ENABLE_DOT3
 	const u_int8_t dot3[] = LLDP_TLV_ORG_DOT3;
@@ -112,35 +143,36 @@ lldp_send(struct lldpd *global,
 	      POKE_END_LLDP_TLV))
 		goto toobig;
 
-	if (chassis->c_mgmt.s_addr != INADDR_ANY) {
-		/* Management address */
+	/* Management addresses */
+	TAILQ_FOREACH(mgmt, &chassis->c_mgmt, m_entries) {
+		proto = lldpd_af_to_lldp_proto(mgmt->m_family);
+		assert(proto != LLDP_MGMT_ADDR_NONE);
 		if (!(
-		      POKE_START_LLDP_TLV(LLDP_TLV_MGMT_ADDR) &&
-		      /* Size of the address, including its type */
-		      POKE_UINT8(sizeof(struct in_addr) + 1) &&
-		      /* Address is IPv4 */
-		      POKE_UINT8(LLDP_MGMT_ADDR_IP4) &&
-		      POKE_BYTES(&chassis->c_mgmt, sizeof(struct in_addr))))
+			  POKE_START_LLDP_TLV(LLDP_TLV_MGMT_ADDR) &&
+			  /* Size of the address, including its type */
+			  POKE_UINT8(mgmt->m_addrsize + 1) &&
+			  POKE_UINT8(proto) &&
+			  POKE_BYTES(&mgmt->m_addr, mgmt->m_addrsize)))
 			goto toobig;
 
 		/* Interface port type, OID */
-		if (chassis->c_mgmt_if == 0) {
+		if (mgmt->m_iface == 0) {
 			if (!(
-			      /* We don't know the management interface */
-			      POKE_UINT8(LLDP_MGMT_IFACE_UNKNOWN) &&
-			      POKE_UINT32(0)))
+				  /* We don't know the management interface */
+				  POKE_UINT8(LLDP_MGMT_IFACE_UNKNOWN) &&
+				  POKE_UINT32(0)))
 				goto toobig;
 		} else {
 			if (!(
-			      /* We have the index of the management interface */
-			      POKE_UINT8(LLDP_MGMT_IFACE_IFINDEX) &&
-			      POKE_UINT32(chassis->c_mgmt_if)))
+				  /* We have the index of the management interface */
+				  POKE_UINT8(LLDP_MGMT_IFACE_IFINDEX) &&
+				  POKE_UINT32(mgmt->m_iface)))
 				goto toobig;
 		}
 		if (!(
-		      /* We don't provide an OID for management */
-		      POKE_UINT8(0) &&
-		      POKE_END_LLDP_TLV))
+			  /* We don't provide an OID for management */
+			  POKE_UINT8(0) &&
+			  POKE_END_LLDP_TLV))
 			goto toobig;
 	}
 
@@ -152,6 +184,29 @@ lldp_send(struct lldpd *global,
 		goto toobig;
 
 #ifdef ENABLE_DOT1
+	/* Port VLAN ID */
+	if(port->p_pvid != 0) {
+		if (!(
+		    POKE_START_LLDP_TLV(LLDP_TLV_ORG) &&
+		    POKE_BYTES(dot1, sizeof(dot1)) &&
+		    POKE_UINT8(LLDP_TLV_DOT1_PVID) &&
+		    POKE_UINT16(port->p_pvid) &&
+		    POKE_END_LLDP_TLV)) {
+		    goto toobig;
+		}
+	}
+	/* Port and Protocol VLAN IDs */
+	TAILQ_FOREACH(ppvid, &port->p_ppvids, p_entries) {
+		if (!(
+		      POKE_START_LLDP_TLV(LLDP_TLV_ORG) &&
+		      POKE_BYTES(dot1, sizeof(dot1)) &&
+		      POKE_UINT8(LLDP_TLV_DOT1_PPVID) &&
+		      POKE_UINT8(ppvid->p_cap_status) &&
+		      POKE_UINT16(ppvid->p_ppvid) &&
+		      POKE_END_LLDP_TLV)) {
+			goto toobig;
+		}
+	}
 	/* VLANs */
 	TAILQ_FOREACH(vlan, &port->p_vlans, v_entries) {
 		if (!(
@@ -161,6 +216,17 @@ lldp_send(struct lldpd *global,
 		      POKE_UINT16(vlan->v_vid) &&
 		      POKE_UINT8(strlen(vlan->v_name)) &&
 		      POKE_BYTES(vlan->v_name, strlen(vlan->v_name)) &&
+		      POKE_END_LLDP_TLV))
+			goto toobig;
+	}
+	/* Protocol Identities */
+	TAILQ_FOREACH(pi, &port->p_pids, p_entries) {
+		if (!(
+		      POKE_START_LLDP_TLV(LLDP_TLV_ORG) &&
+		      POKE_BYTES(dot1, sizeof(dot1)) &&
+		      POKE_UINT8(LLDP_TLV_DOT1_PI) &&
+		      POKE_UINT8(pi->p_pi_len) &&
+		      POKE_BYTES(pi->p_pi, pi->p_pi_len) &&
 		      POKE_END_LLDP_TLV))
 			goto toobig;
 	}
@@ -183,21 +249,54 @@ lldp_send(struct lldpd *global,
 	      POKE_START_LLDP_TLV(LLDP_TLV_ORG) &&
 	      POKE_BYTES(dot3, sizeof(dot3)) &&
 	      POKE_UINT8(LLDP_TLV_DOT3_MAC) &&
-	      POKE_UINT8(port->p_autoneg_support |
-			 (port->p_autoneg_enabled << 1)) &&
-	      POKE_UINT16(port->p_autoneg_advertised) &&
-	      POKE_UINT16(port->p_mau_type) &&
+	      POKE_UINT8(port->p_macphy.autoneg_support |
+			 (port->p_macphy.autoneg_enabled << 1)) &&
+	      POKE_UINT16(port->p_macphy.autoneg_advertised) &&
+	      POKE_UINT16(port->p_macphy.mau_type) &&
 	      POKE_END_LLDP_TLV))
 		goto toobig;
 
 	/* MFS */
-	if (!(
-	      POKE_START_LLDP_TLV(LLDP_TLV_ORG) &&
-	      POKE_BYTES(dot3, sizeof(dot3)) &&
-	      POKE_UINT8(LLDP_TLV_DOT3_MFS) &&
-	      POKE_UINT16(port->p_mfs) &&
-	      POKE_END_LLDP_TLV))
-		goto toobig;
+	if (port->p_mfs) {
+		if (!(
+		      POKE_START_LLDP_TLV(LLDP_TLV_ORG) &&
+		      POKE_BYTES(dot3, sizeof(dot3)) &&
+		      POKE_UINT8(LLDP_TLV_DOT3_MFS) &&
+		      POKE_UINT16(port->p_mfs) &&
+		      POKE_END_LLDP_TLV))
+			goto toobig;
+	}
+	/* Power */
+	if (port->p_power.devicetype) {
+		if (!(
+		      POKE_START_LLDP_TLV(LLDP_TLV_ORG) &&
+		      POKE_BYTES(dot3, sizeof(dot3)) &&
+		      POKE_UINT8(LLDP_TLV_DOT3_POWER) &&
+		      POKE_UINT8((
+				  (((2 - port->p_power.devicetype)    %(1<< 1))<<0) |
+				  (( port->p_power.supported          %(1<< 1))<<1) |
+				  (( port->p_power.enabled            %(1<< 1))<<2) |
+				  (( port->p_power.paircontrol        %(1<< 1))<<3))) &&
+		      POKE_UINT8(port->p_power.pairs) &&
+		      POKE_UINT8(port->p_power.class)))
+			goto toobig;
+		/* 802.3at */
+		if (port->p_power.powertype != LLDP_DOT3_POWER_8023AT_OFF) {
+			if (!(
+			      POKE_UINT8((
+					  (((port->p_power.powertype ==
+					      LLDP_DOT3_POWER_8023AT_TYPE1)?1:0) << 7) |
+					   (((port->p_power.devicetype ==
+					      LLDP_DOT3_POWER_PSE)?0:1) << 6) |
+					   ((port->p_power.source   %(1<< 2))<<4) |
+					   ((port->p_power.priority %(1<< 2))<<0))) &&
+			      POKE_UINT16(port->p_power.requested) &&
+			      POKE_UINT16(port->p_power.allocated)))
+				goto toobig;
+		}
+		if (!(POKE_END_LLDP_TLV))
+			goto toobig;
+	}
 #endif
 
 #ifdef ENABLE_LLDPMED
@@ -255,6 +354,65 @@ lldp_send(struct lldpd *global,
 				      POKE_END_LLDP_TLV))
 					goto toobig;
 			}
+		}
+
+		/* LLDP-MED network policy */
+		for (i = 0; i < LLDPMED_APPTYPE_LAST; i++) {
+			if (port->p_med_policy[i].type == i + 1) {
+				if (!(
+				      POKE_START_LLDP_TLV(LLDP_TLV_ORG) &&
+				      POKE_BYTES(med, sizeof(med)) &&
+				      POKE_UINT8(LLDP_TLV_MED_POLICY) &&
+				      POKE_UINT32((
+					((port->p_med_policy[i].type     %(1<< 8))<<24) |
+					((port->p_med_policy[i].unknown  %(1<< 1))<<23) |
+					((port->p_med_policy[i].tagged   %(1<< 1))<<22) |
+				      /*((0                              %(1<< 1))<<21) |*/
+					((port->p_med_policy[i].vid      %(1<<12))<< 9) |
+					((port->p_med_policy[i].priority %(1<< 3))<< 6) |
+					((port->p_med_policy[i].dscp     %(1<< 6))<< 0) )) &&
+				      POKE_END_LLDP_TLV))
+					goto toobig;
+			}
+		}
+
+		/* LLDP-MED POE-MDI */
+		if ((port->p_med_power.devicetype == LLDPMED_POW_TYPE_PSE) ||
+		    (port->p_med_power.devicetype == LLDPMED_POW_TYPE_PD)) {
+			int devicetype = 0, source = 0;
+			if (!(
+			      POKE_START_LLDP_TLV(LLDP_TLV_ORG) &&
+			      POKE_BYTES(med, sizeof(med)) &&
+			      POKE_UINT8(LLDP_TLV_MED_MDI)))
+				goto toobig;
+			switch (port->p_med_power.devicetype) {
+			case LLDPMED_POW_TYPE_PSE:
+				devicetype = 0;
+				switch (port->p_med_power.source) {
+				case LLDPMED_POW_SOURCE_PRIMARY: source = 1; break;
+				case LLDPMED_POW_SOURCE_BACKUP: source = 2; break;
+				case LLDPMED_POW_SOURCE_RESERVED: source = 3; break;
+				default: source = 0; break;
+				}
+				break;
+			case LLDPMED_POW_TYPE_PD:
+				devicetype = 1;
+				switch (port->p_med_power.source) {
+				case LLDPMED_POW_SOURCE_PSE: source = 1; break;
+				case LLDPMED_POW_SOURCE_LOCAL: source = 2; break;
+				case LLDPMED_POW_SOURCE_BOTH: source = 3; break;
+				default: source = 0; break;
+				}
+				break;
+			}
+			if (!(
+			      POKE_UINT8((
+				((devicetype                   %(1<< 2))<<6) |
+				((source                       %(1<< 2))<<4) |
+				((port->p_med_power.priority   %(1<< 4))<<0) )) &&
+			      POKE_UINT16(port->p_med_power.val) &&
+			      POKE_END_LLDP_TLV))
+				goto toobig;
 		}
 	}
 #endif
@@ -325,12 +483,20 @@ lldp_decode(struct lldpd *cfg, char *frame, int s,
 #ifdef ENABLE_DOT1
 	struct lldpd_vlan *vlan;
 	int vlan_len;
+	struct lldpd_ppvid *ppvid;
+	struct lldpd_pi *pi;
 #endif
+	struct lldpd_mgmt *mgmt;
+	int af;
+	u_int8_t addr_str_length, addr_str_buffer[32];
+	u_int8_t addr_family, addr_length, *addr_ptr, iface_subtype;
+	u_int32_t iface_number, iface;
 
 	if ((chassis = calloc(1, sizeof(struct lldpd_chassis))) == NULL) {
 		LLOG_WARN("failed to allocate remote chassis");
 		return -1;
 	}
+	TAILQ_INIT(&chassis->c_mgmt);
 	if ((port = calloc(1, sizeof(struct lldpd_port))) == NULL) {
 		LLOG_WARN("failed to allocate remote port");
 		free(chassis);
@@ -338,6 +504,8 @@ lldp_decode(struct lldpd *cfg, char *frame, int s,
 	}
 #ifdef ENABLE_DOT1
 	TAILQ_INIT(&port->p_vlans);
+	TAILQ_INIT(&port->p_ppvids);
+	TAILQ_INIT(&port->p_pids);
 #endif
 
 	length = s;
@@ -443,17 +611,32 @@ lldp_decode(struct lldpd *cfg, char *frame, int s,
 			chassis->c_cap_enabled = PEEK_UINT16;
 			break;
 		case LLDP_TLV_MGMT_ADDR:
-			CHECK_TLV_SIZE(11, "Management address");
-			if ((chassis->c_mgmt.s_addr == INADDR_ANY) &&
-			    (PEEK_UINT8 == 1+sizeof(struct in_addr)) &&
-			    (PEEK_UINT8 == LLDP_MGMT_ADDR_IP4)) {
-				/* We have an IPv4 address, we ignore anything else */
-				PEEK_BYTES(&chassis->c_mgmt, sizeof(struct in_addr));
-				chassis->c_mgmt_if = 0;
-				/* We only handle ifIndex subtype */
-				if (PEEK_UINT8 == LLDP_MGMT_IFACE_IFINDEX)
-					chassis->c_mgmt_if = PEEK_UINT32;
+			CHECK_TLV_SIZE(1, "Management address");
+			addr_str_length = PEEK_UINT8;
+			CHECK_TLV_SIZE(addr_str_length, "Management address");
+			PEEK_BYTES(addr_str_buffer, addr_str_length);
+			addr_length = addr_str_length - 1;
+			addr_family = addr_str_buffer[0];
+			addr_ptr = &addr_str_buffer[1];
+			CHECK_TLV_SIZE(5, "Management address");
+			iface_subtype = PEEK_UINT8;
+			iface_number = PEEK_UINT32;
+			
+			af = lldpd_af_from_lldp_proto(addr_family);
+			if (af == LLDPD_AF_UNSPEC)
+				break;
+			if (iface_subtype == LLDP_MGMT_IFACE_IFINDEX)
+				iface = iface_number;
+			else
+				iface = 0;
+			mgmt = lldpd_alloc_mgmt(af, addr_ptr, addr_length, iface);
+			if (mgmt == NULL) {
+				assert(errno == ENOMEM);
+				LLOG_WARN("unable to allocate memory "
+							"for management address");
+						goto malformed;
 			}
+			TAILQ_INSERT_TAIL(&chassis->c_mgmt, mgmt, m_entries);
 			break;
 		case LLDP_TLV_ORG:
 			CHECK_TLV_SIZE(4, "Organisational");
@@ -493,6 +676,56 @@ lldp_decode(struct lldpd *cfg, char *frame, int s,
 					CHECK_TLV_SIZE(6, "PVID");
 					port->p_pvid = PEEK_UINT16;
 					break;
+				case LLDP_TLV_DOT1_PPVID:
+					CHECK_TLV_SIZE(7, "PPVID");
+					/* validation needed */
+					/* PPVID has to be unique if more than
+					   one PPVID TLVs are received  - 
+					   discard if duplicate */
+					/* if support bit is not set and 
+					   enabled bit is set - PPVID TLV is
+					   considered error  and discarded */
+					/* if PPVID > 4096 - bad and discard */
+					if ((ppvid = (struct lldpd_ppvid *)calloc(1,
+						    sizeof(struct lldpd_ppvid))) == NULL) {
+						LLOG_WARN("unable to alloc ppvid "
+						    "structure for "
+						    "tlv received on %s",
+						    hardware->h_ifname);
+						goto malformed;
+					}
+					ppvid->p_cap_status = PEEK_UINT8;
+					ppvid->p_ppvid = PEEK_UINT16;	
+					TAILQ_INSERT_TAIL(&port->p_ppvids,
+					    ppvid, p_entries);
+					break;
+				case LLDP_TLV_DOT1_PI:
+					/* validation needed */
+					/* PI has to be unique if more than 
+					   one PI TLVs are received  - discard
+					   if duplicate ?? */
+					CHECK_TLV_SIZE(5, "PI");
+					if ((pi = (struct lldpd_pi *)calloc(1,
+						    sizeof(struct lldpd_pi))) == NULL) {
+						LLOG_WARN("unable to alloc PI "
+						    "structure for "
+						    "tlv received on %s",
+						    hardware->h_ifname);
+						goto malformed;
+					}
+					pi->p_pi_len = PEEK_UINT8;
+					CHECK_TLV_SIZE(1 + pi->p_pi_len, "PI");
+					if ((pi->p_pi =
+						(char *)calloc(1, pi->p_pi_len)) == NULL) {
+						LLOG_WARN("unable to alloc pid name for "
+						    "tlv received on %s",
+						    hardware->h_ifname);
+						goto malformed;
+					}
+					PEEK_BYTES(pi->p_pi, pi->p_pi_len);
+					TAILQ_INSERT_TAIL(&port->p_pids,
+					    pi, p_entries);
+					break;
 				default:
 					/* Unknown Dot1 TLV, ignore it */
 					hardware->h_rx_unrecognized_cnt++;
@@ -506,14 +739,14 @@ lldp_decode(struct lldpd *cfg, char *frame, int s,
 				switch (tlv_subtype) {
 				case LLDP_TLV_DOT3_MAC:
 					CHECK_TLV_SIZE(9, "MAC/PHY");
-					port->p_autoneg_support = PEEK_UINT8;
-					port->p_autoneg_enabled =
-					    port->p_autoneg_support && 0x2;
-					port->p_autoneg_support =
-					    port->p_autoneg_support && 0x1;
-					port->p_autoneg_advertised =
+					port->p_macphy.autoneg_support = PEEK_UINT8;
+					port->p_macphy.autoneg_enabled =
+					    (port->p_macphy.autoneg_support & 0x2) >> 1;
+					port->p_macphy.autoneg_support =
+					    port->p_macphy.autoneg_support & 0x1;
+					port->p_macphy.autoneg_advertised =
 					    PEEK_UINT16;
-					port->p_mau_type = PEEK_UINT16;
+					port->p_macphy.mau_type = PEEK_UINT16;
 					break;
 				case LLDP_TLV_DOT3_LA:
 					CHECK_TLV_SIZE(9, "Link aggregation");
@@ -523,6 +756,37 @@ lldp_decode(struct lldpd *cfg, char *frame, int s,
 				case LLDP_TLV_DOT3_MFS:
 					CHECK_TLV_SIZE(6, "MFS");
 					port->p_mfs = PEEK_UINT16;
+					break;
+				case LLDP_TLV_DOT3_POWER:
+					CHECK_TLV_SIZE(7, "Power");
+					port->p_power.devicetype = PEEK_UINT8;
+					port->p_power.supported =
+						(port->p_power.devicetype & 0x2) >> 1;
+					port->p_power.enabled =
+						(port->p_power.devicetype & 0x4) >> 2;
+					port->p_power.paircontrol =
+						(port->p_power.devicetype & 0x8) >> 4;
+					port->p_power.devicetype =
+						(port->p_power.devicetype & 0x1)?
+						LLDP_DOT3_POWER_PSE:LLDP_DOT3_POWER_PD;
+					port->p_power.pairs = PEEK_UINT8;
+					port->p_power.class = PEEK_UINT8;
+					/* 802.3at? */
+					if (tlv_size >= 12) {
+						port->p_power.powertype = PEEK_UINT8;
+						port->p_power.source =
+						    (port->p_power.powertype & (1<<5 | 1<<4)) >> 4;
+						port->p_power.priority =
+						    (port->p_power.powertype & (1<<1 | 1<<0));
+						port->p_power.powertype =
+						    (port->p_power.powertype & (1<<7))?
+						    LLDP_DOT3_POWER_8023AT_TYPE1:
+						    LLDP_DOT3_POWER_8023AT_TYPE2;
+						port->p_power.requested = PEEK_UINT16;
+						port->p_power.allocated = PEEK_UINT16;
+					} else
+						port->p_power.powertype =
+						    LLDP_DOT3_POWER_8023AT_OFF;
 					break;
 				default:
 					/* Unknown Dot3 TLV, ignore it */
@@ -603,75 +867,61 @@ lldp_decode(struct lldpd *cfg, char *frame, int s,
 					power = PEEK_UINT8;
 					switch (power & 0xC0) {
 					case 0x0:
-						port->p_med_pow_devicetype = LLDPMED_POW_TYPE_PSE;
+						port->p_med_power.devicetype = LLDPMED_POW_TYPE_PSE;
 						port->p_med_cap_enabled |=
 						    LLDPMED_CAP_MDI_PSE;
 						switch (power & 0x30) {
 						case 0x0:
-							port->p_med_pow_source =
+							port->p_med_power.source =
 							    LLDPMED_POW_SOURCE_UNKNOWN;
 							break;
 						case 0x10:
-							port->p_med_pow_source =
+							port->p_med_power.source =
 							    LLDPMED_POW_SOURCE_PRIMARY;
 							break;
 						case 0x20:
-							port->p_med_pow_source =
+							port->p_med_power.source =
 							    LLDPMED_POW_SOURCE_BACKUP;
 							break;
 						default:
-							port->p_med_pow_source =
+							port->p_med_power.source =
 							    LLDPMED_POW_SOURCE_RESERVED;
 						}
 						break;
 					case 0x40:
-						port->p_med_pow_devicetype = LLDPMED_POW_TYPE_PD;
+						port->p_med_power.devicetype = LLDPMED_POW_TYPE_PD;
 						port->p_med_cap_enabled |=
 						    LLDPMED_CAP_MDI_PD;
 						switch (power & 0x30) {
 						case 0x0:
-							port->p_med_pow_source =
+							port->p_med_power.source =
 							    LLDPMED_POW_SOURCE_UNKNOWN;
 							break;
 						case 0x10:
-							port->p_med_pow_source =
+							port->p_med_power.source =
 							    LLDPMED_POW_SOURCE_PSE;
 							break;
 						case 0x20:
-							port->p_med_pow_source =
+							port->p_med_power.source =
 							    LLDPMED_POW_SOURCE_LOCAL;
 							break;
 						default:
-							port->p_med_pow_source =
+							port->p_med_power.source =
 							    LLDPMED_POW_SOURCE_BOTH;
 						}
 						break;
 					default:
-						port->p_med_pow_devicetype =
+						port->p_med_power.devicetype =
 						    LLDPMED_POW_TYPE_RESERVED;
 					}
-					switch (power & 0x0F) {
-					case 0x0:
-						port->p_med_pow_priority =
+					if (((power & 0x0F) < 0) ||
+					    ((power & 0x0F) > LLDPMED_POW_PRIO_LOW))
+						port->p_med_power.priority =
 						    LLDPMED_POW_PRIO_UNKNOWN;
-						break;
-					case 0x1:
-						port->p_med_pow_priority =
-						    LLDPMED_POW_PRIO_CRITICAL;
-						break;
-					case 0x2:
-						port->p_med_pow_priority =
-						    LLDPMED_POW_PRIO_HIGH;
-						break;
-					case 0x3:
-						port->p_med_pow_priority =
-						    LLDPMED_POW_PRIO_LOW;
-						break;
-					default:
-						port->p_med_pow_priority =
-						    LLDPMED_POW_PRIO_UNKNOWN;
-					}
-					port->p_med_pow_val = PEEK_UINT16;
+					else
+						port->p_med_power.priority =
+						    power & 0x0F;
+					port->p_med_power.val = PEEK_UINT16;
 					break;
 				case LLDP_TLV_MED_IV_HW:
 				case LLDP_TLV_MED_IV_SW:

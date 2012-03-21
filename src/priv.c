@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2008 Vincent Bernat <bernat@luffy.cx>
  *
- * Permission to use, copy, modify, and distribute this software for any
+ * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
  * copyright notice and this permission notice appear in all copies.
  *
@@ -212,6 +212,8 @@ asroot_ctl_create()
 	int rc;
 	if ((rc = ctl_create(LLDPD_CTL_SOCKET)) == -1) {
 		LLOG_WARN("[priv]: unable to create control socket");
+		LLOG_WARNX("[priv]: If another instance is running, please stop it.");
+		LLOG_WARNX("[priv]: Otherwise, remove " LLDPD_CTL_SOCKET);
 		must_write(remote, &rc, sizeof(int));
 		return;
 	}
@@ -573,7 +575,7 @@ priv_init(char *chrootdir)
  * Copyright (c) 2003 Can Erkin Acar
  * Copyright (c) 2003 Anil Madhavapeddy <anil@recoil.org>
  *
- * Permission to use, copy, modify, and distribute this software for any
+ * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
  * copyright notice and this permission notice appear in all copies.
  *

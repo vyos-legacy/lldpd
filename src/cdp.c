@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2008 Vincent Bernat <bernat@luffy.cx>
  *
- * Permission to use, copy, modify, and distribute this software for any
+ * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
  * copyright notice and this permission notice appear in all copies.
  *
@@ -20,22 +20,25 @@
 
 #if defined (ENABLE_CDP) || defined (ENABLE_FDP)
 
+#include <stdio.h>
 #include <unistd.h>
 #include <errno.h>
 #include <arpa/inet.h>
+#include <assert.h>
 
 static int
 cdp_send(struct lldpd *global,
 	 struct lldpd_hardware *hardware, int version)
 {
 	struct lldpd_chassis *chassis;
+	struct lldpd_mgmt *mgmt;
 	u_int8_t mcastaddr[] = CDP_MULTICAST_ADDR;
 	u_int8_t llcorg[] = LLC_ORG_CISCO;
 #ifdef ENABLE_FDP
 	char *capstr;
 #endif
 	u_int16_t checksum;
-	int length;
+	int length, i;
 	u_int32_t cap;
 	u_int8_t *packet;
 	u_int8_t *pos, *pos_len_eh, *pos_llc, *pos_cdp, *pos_checksum, *tlv, *end;
@@ -93,16 +96,37 @@ cdp_send(struct lldpd *global,
 		goto toobig;
 
 	/* Adresses */
-	if (!(
-	      POKE_START_CDP_TLV(CDP_TLV_ADDRESSES) &&
-	      POKE_UINT32(1) &&	/* We ship only one address */
-	      POKE_UINT8(1) &&	/* Type: NLPID */
-	      POKE_UINT8(1) &&  /* Length: 1 */
-	      POKE_UINT8(CDP_ADDRESS_PROTO_IP) && /* IP */
-	      POKE_UINT16(sizeof(struct in_addr)) && /* Address length */
-	      POKE_BYTES(&chassis->c_mgmt, sizeof(struct in_addr)) &&
-	      POKE_END_CDP_TLV))
-		goto toobig;
+	/* See:
+	 *   http://www.cisco.com/univercd/cc/td/doc/product/lan/trsrb/frames.htm#xtocid12
+	 *
+	 * It seems that Cisco implies that CDP supports IPv6 using
+	 * 802.2 address format with 0xAAAA03 0x000000 0x0800, but
+	 * 0x0800 is the Ethernet protocol type for IPv4. Therefore,
+	 * we support only IPv4. */
+	i = 0;
+	TAILQ_FOREACH(mgmt, &chassis->c_mgmt, m_entries)
+		if (mgmt->m_family == LLDPD_AF_IPV4) i++;
+	if (i > 0) {
+		if (!(
+		      POKE_START_CDP_TLV(CDP_TLV_ADDRESSES) &&
+		      POKE_UINT32(i)))
+			goto toobig;
+		TAILQ_FOREACH(mgmt, &chassis->c_mgmt, m_entries) {
+			switch (mgmt->m_family) {
+			case LLDPD_AF_IPV4:
+				if (!(
+				      POKE_UINT8(1) &&	/* Type: NLPID */
+				      POKE_UINT8(1) &&  /* Length: 1 */
+				      POKE_UINT8(CDP_ADDRESS_PROTO_IP) && /* IP */
+				      POKE_UINT16(sizeof(struct in_addr)) && /* Address length */
+				      POKE_BYTES(&mgmt->m_addr, sizeof(struct in_addr))))
+					goto toobig;
+				break;
+			}
+		}
+		if (!(POKE_END_CDP_TLV))
+			goto toobig;
+	}
 
 	/* Port ID */
 	if (!(
@@ -118,7 +142,8 @@ cdp_send(struct lldpd *global,
 		if (chassis->c_cap_enabled & LLDP_CAP_ROUTER)
 			cap |= CDP_CAP_ROUTER;
 		if (chassis->c_cap_enabled & LLDP_CAP_BRIDGE)
-			cap |= CDP_CAP_BRIDGE;
+			cap |= CDP_CAP_SWITCH;
+		cap |= CDP_CAP_HOST;
 		if (!(
 		      POKE_START_CDP_TLV(CDP_TLV_CAPABILITIES) &&
 		      POKE_UINT32(cap) &&
@@ -142,6 +167,17 @@ cdp_send(struct lldpd *global,
 			goto toobig;
 #endif
 	}
+
+	/* Native VLAN */
+#ifdef ENABLE_DOT1
+	if (version >=2 && hardware->h_lport.p_pvid != 0) {
+		if (!(
+		      POKE_START_CDP_TLV(CDP_TLV_NATIVEVLAN) &&
+		      POKE_UINT16(hardware->h_lport.p_pvid) &&
+		      POKE_END_CDP_TLV))
+			goto toobig;
+	}
+#endif
 		
 	/* Software version */
 	if (!(
@@ -151,9 +187,11 @@ cdp_send(struct lldpd *global,
 		goto toobig;
 
 	/* Platform */
+	char *platform = "Linux";
+	if (global && global->g_platform_override) platform = global->g_platform_override;
 	if (!(
 	      POKE_START_CDP_TLV(CDP_TLV_PLATFORM) &&
-	      POKE_BYTES("Vyatta Router", strlen("Vyatta Router")) &&
+	      POKE_BYTES(platform, strlen(platform)) &&
 	      POKE_END_CDP_TLV))
 		goto toobig;
 	POKE_SAVE(end);
@@ -196,7 +234,11 @@ cdp_decode(struct lldpd *cfg, char *frame, int s,
 {
 	struct lldpd_chassis *chassis;
 	struct lldpd_port *port;
+	struct lldpd_mgmt *mgmt;
+	struct in_addr addr;
+#if 0
 	u_int16_t cksum;
+#endif
 	u_int8_t *software = NULL, *platform = NULL;
 	int software_len = 0, platform_len = 0, proto, version, nb, caps;
 	const unsigned char cdpaddr[] = CDP_MULTICAST_ADDR;
@@ -206,11 +248,15 @@ cdp_decode(struct lldpd *cfg, char *frame, int s,
 #endif
 	u_int8_t *pos, *tlv, *pos_address, *pos_next_address;
 	int length, len_eth, tlv_type, tlv_len, addresses_len, address_len;
+#ifdef ENABLE_DOT1
+	struct lldpd_vlan *vlan;
+#endif
 
 	if ((chassis = calloc(1, sizeof(struct lldpd_chassis))) == NULL) {
 		LLOG_WARN("failed to allocate remote chassis");
 		return -1;
 	}
+	TAILQ_INIT(&chassis->c_mgmt);
 	if ((port = calloc(1, sizeof(struct lldpd_port))) == NULL) {
 		LLOG_WARN("failed to allocate remote port");
 		free(chassis);
@@ -265,6 +311,7 @@ cdp_decode(struct lldpd *cfg, char *frame, int s,
 		goto malformed;
 	}
 
+#if 0
 	/* Check checksum */
 	cksum = frame_checksum(pos, len_eth - 8,
 #ifdef ENABLE_FDP
@@ -279,6 +326,7 @@ cdp_decode(struct lldpd *cfg, char *frame, int s,
 			  hardware->h_ifname, cksum);
 		goto malformed;
 	}
+#endif
 
 	/* Check version */
 	version = PEEK_UINT8;
@@ -357,10 +405,17 @@ cdp_decode(struct lldpd *cfg, char *frame, int s,
 				PEEK_RESTORE(pos_address);
 				if ((PEEK_UINT8 == 1) && (PEEK_UINT8 == 1) &&
 				    (PEEK_UINT8 == CDP_ADDRESS_PROTO_IP) &&
-				    (PEEK_UINT16 == sizeof(struct in_addr)) &&
-				    (chassis->c_mgmt.s_addr == INADDR_ANY))
-					PEEK_BYTES(&chassis->c_mgmt,
-						   sizeof(struct in_addr));
+				    (PEEK_UINT16 == sizeof(struct in_addr))) {
+						PEEK_BYTES(&addr, sizeof(struct in_addr));
+						mgmt = lldpd_alloc_mgmt(LLDPD_AF_IPV4, &addr, 
+									sizeof(struct in_addr), 0);
+						if (mgmt == NULL) {
+							assert(errno == ENOMEM);
+							LLOG_WARN("unable to allocate memory for management address");
+							goto malformed;
+						}
+						TAILQ_INSERT_TAIL(&chassis->c_mgmt, mgmt, m_entries);
+				}
 				/* Go to the end of the address */
 				PEEK_RESTORE(pos_next_address);
 			}
@@ -413,6 +468,29 @@ cdp_decode(struct lldpd *cfg, char *frame, int s,
 			platform_len = tlv_len;
 			PEEK_SAVE(platform);
 			break;
+#ifdef ENABLE_DOT1
+		case CDP_TLV_NATIVEVLAN:
+			CHECK_TLV_SIZE(2, "Native VLAN");
+			if ((vlan = (struct lldpd_vlan *)calloc(1,
+				sizeof(struct lldpd_vlan))) == NULL) {
+				LLOG_WARN("unable to alloc vlan "
+					  "structure for "
+					  "tlv received on %s",
+					  hardware->h_ifname);
+				goto malformed;
+			}
+			vlan->v_vid = port->p_pvid = PEEK_UINT16;
+			if (asprintf(&vlan->v_name, "VLAN #%d", vlan->v_vid) == -1) {
+				LLOG_WARN("unable to alloc VLAN name for "
+					  "TLV received on %s",
+					  hardware->h_ifname);
+				free(vlan);
+				goto malformed;
+			}
+			TAILQ_INSERT_TAIL(&port->p_vlans,
+					  vlan, v_entries);
+			break;
+#endif
 		default:
 			LLOG_DEBUG("unknown CDP/FDP TLV type (%d) received on %s",
 			    ntohs(tlv_type), hardware->h_ifname);

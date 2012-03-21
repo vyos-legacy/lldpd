@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2008 Vincent Bernat <bernat@luffy.cx>
  *
- * Permission to use, copy, modify, and distribute this software for any
+ * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
  * copyright notice and this permission notice appear in all copies.
  *
@@ -24,6 +24,7 @@
 #include <errno.h>
 #include <arpa/inet.h>
 #include <fnmatch.h>
+#include <assert.h>
 
 static int seq = 0;
 
@@ -229,6 +230,7 @@ edp_decode(struct lldpd *cfg, char *frame, int s,
 {
 	struct lldpd_chassis *chassis;
 	struct lldpd_port *port;
+	struct lldpd_mgmt *mgmt, *mgmt_next, *m;
 #ifdef ENABLE_DOT1
 	struct lldpd_vlan *lvlan = NULL, *lvlan_next;
 #endif
@@ -246,6 +248,7 @@ edp_decode(struct lldpd *cfg, char *frame, int s,
 		LLOG_WARN("failed to allocate remote chassis");
 		return -1;
 	}
+	TAILQ_INIT(&chassis->c_mgmt);
 	if ((port = calloc(1, sizeof(struct lldpd_port))) == NULL) {
 		LLOG_WARN("failed to allocate remote port");
 		free(chassis);
@@ -410,18 +413,14 @@ edp_decode(struct lldpd *cfg, char *frame, int s,
 			PEEK_BYTES(lvlan->v_name, tlv_len - 12);
 
 			if (address.s_addr != INADDR_ANY) {
-				if (chassis->c_mgmt.s_addr == INADDR_ANY)
-					chassis->c_mgmt.s_addr = address.s_addr;
-				else
-					/* We need to guess the good one */
-					if (cfg->g_mgmt_pattern != NULL) {
-						/* We can try to use this to prefer an address */
-						char *ip;
-						ip = inet_ntoa(address);
-						if (fnmatch(cfg->g_mgmt_pattern,
-							ip, 0) == 0)
-							chassis->c_mgmt.s_addr = address.s_addr;
-					}
+				mgmt = lldpd_alloc_mgmt(LLDPD_AF_IPV4, &address, 
+							sizeof(struct in_addr), 0);
+				if (mgmt == NULL) {
+					assert(errno == ENOMEM);
+					LLOG_WARN("Out of memory");
+					goto malformed;
+				}
+				TAILQ_INSERT_TAIL(&chassis->c_mgmt, mgmt, m_entries);
 			}
 			TAILQ_INSERT_TAIL(&port->p_vlans,
 			    lvlan, v_entries);
@@ -463,10 +462,21 @@ edp_decode(struct lldpd *cfg, char *frame, int s,
 					TAILQ_INSERT_TAIL(&oport->p_vlans,
 					    lvlan, v_entries);
 				}
-				/* And the IP address */
-				oport->p_chassis->c_mgmt.s_addr =
-				    chassis->c_mgmt.s_addr;
-				break;
+				/* And the IP addresses */
+				for (mgmt = TAILQ_FIRST(&chassis->c_mgmt);
+				     mgmt != NULL;
+				     mgmt = mgmt_next) {
+					mgmt_next = TAILQ_NEXT(mgmt, m_entries);
+					TAILQ_REMOVE(&chassis->c_mgmt, mgmt, m_entries);
+					/* Don't add an address that already exists! */
+					TAILQ_FOREACH(m, &chassis->c_mgmt, m_entries)
+					    if (m->m_family == mgmt->m_family &&
+						!memcmp(&m->m_addr, &mgmt->m_addr,
+						    sizeof(m->m_addr))) break;
+					if (m == NULL)
+						TAILQ_INSERT_TAIL(&oport->p_chassis->c_mgmt,
+						    mgmt, m_entries);
+				}
 			}
 			/* We discard the remaining frame */
 			goto malformed;

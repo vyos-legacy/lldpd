@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2008 Vincent Bernat <bernat@luffy.cx>
  *
- * Permission to use, copy, modify, and distribute this software for any
+ * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
  * copyright notice and this permission notice appear in all copies.
  *
@@ -41,13 +41,19 @@ enum {
 	CDP_TLV_PORT			= 3,
 	CDP_TLV_CAPABILITIES		= 4,
 	CDP_TLV_SOFTWARE		= 5,
-	CDP_TLV_PLATFORM		= 6
+	CDP_TLV_PLATFORM		= 6,
+	CDP_TLV_NATIVEVLAN		= 10
 };
 
 #define CDP_ADDRESS_PROTO_IP 0xcc
 
-#define CDP_CAP_ROUTER 1
-#define CDP_CAP_BRIDGE 8
+#define CDP_CAP_ROUTER             0x01
+#define CDP_CAP_TRANSPARENT_BRIDGE 0x02
+#define CDP_CAP_SOURCE_BRIDGE      0x04
+#define CDP_CAP_SWITCH             0x08
+#define CDP_CAP_HOST               0x10
+#define CDP_CAP_IGMP               0x20
+#define CDP_CAP_REPEATER           0x40
 
 #endif /* _CDP_H */
 

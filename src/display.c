@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2008 Vincent Bernat <bernat@luffy.cx>
  *
- * Permission to use, copy, modify, and distribute this software for any
+ * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
  * copyright notice and this permission notice appear in all copies.
  *
@@ -14,8 +14,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include "lldpd.h"
-#include "writer.h"
+#include "lldpctl.h"
 
 #include <stdio.h>
 #include <unistd.h>
@@ -27,9 +26,6 @@
 #include <arpa/inet.h>
 
 TAILQ_HEAD(interfaces, lldpd_interface);
-#ifdef ENABLE_DOT1
-TAILQ_HEAD(vlans, lldpd_vlan);
-#endif
 
 #define ntohll(x) (((u_int64_t)(ntohl((int)((x << 32) >> 32))) << 32) |	\
 	    (unsigned int)ntohl(((int)(x >> 32))))
@@ -242,6 +238,46 @@ static const struct value_string operational_mau_type_values[] = {
 	{ 53,	"1000BasePX20U - One single-mode fiber EPON ONU, 20km" },
 	{ 0, NULL }
 };
+
+static const struct value_string port_dot3_power_devicetype_map[] = {
+	{ LLDP_DOT3_POWER_PSE, "PSE" },
+	{ LLDP_DOT3_POWER_PD,  "PD" },
+	{ 0, NULL }
+};
+
+static const struct value_string port_dot3_power_pairs_map[] = {
+	{ LLDP_DOT3_POWERPAIRS_SIGNAL, "signal" },
+	{ LLDP_DOT3_POWERPAIRS_SPARE,  "spare" },
+	{ 0, NULL }
+};
+
+static const struct value_string port_dot3_power_class_map[] = {
+	{ 1, "class 0" },
+	{ 2, "class 1" },
+	{ 3, "class 2" },
+	{ 4, "class 3" },
+	{ 5, "class 4" },
+	{ 0, NULL }
+};
+
+static const struct value_string port_dot3_power_pse_source_map[] = {
+	{ LLDP_DOT3_POWER_SOURCE_BOTH, "PSE + Local" },
+	{ LLDP_DOT3_POWER_SOURCE_PSE, "PSE" },
+	{ 0, NULL }
+};
+
+static const struct value_string port_dot3_power_pd_source_map[] = {
+	{ LLDP_DOT3_POWER_SOURCE_BACKUP, "Backup source" },
+	{ LLDP_DOT3_POWER_SOURCE_PRIMARY, "Primary power source" },
+	{ 0, NULL }
+};
+
+static const struct value_string port_dot3_power_priority_map[] = {
+	{ LLDPMED_POW_PRIO_CRITICAL, "critical" },
+	{ LLDPMED_POW_PRIO_HIGH,     "high" },
+	{ LLDPMED_POW_PRIO_LOW,      "low" },
+	{ 0, NULL },
+};
 #endif
 
 static const struct value_string chassis_capability_map[] = {
@@ -304,135 +340,6 @@ dump(void *data, int size, int max, char sep)
 	else
 		*(buffer + i*3 - 1) = 0;
 	return buffer;
-}
-
-
-void
-get_interfaces(int s, struct interfaces *ifs)
-{
-	void *p;
-	struct hmsg *h;
-
-	if ((h = (struct hmsg *)malloc(MAX_HMSGSIZE)) == NULL)
-		fatal(NULL);
-	ctl_msg_init(h, HMSG_GET_INTERFACES);
-	if (ctl_msg_send(s, h) == -1)
-		fatalx("get_interfaces: unable to send request");
-	if (ctl_msg_recv(s, h) == -1)
-		fatalx("get_interfaces: unable to receive answer");
-	if (h->hdr.type != HMSG_GET_INTERFACES)
-		fatalx("get_interfaces: unknown answer type received");
-	p = &h->data;
-	if (ctl_msg_unpack_list(STRUCT_LLDPD_INTERFACE,
-		ifs, sizeof(struct lldpd_interface), h, &p) == -1)
-		fatalx("get_interfaces: unable to retrieve the list of interfaces");
-}
-
-#ifdef ENABLE_DOT1
-static int
-get_vlans(int s, struct vlans *vls, char *interface, int nb)
-{
-	void *p;
-	struct hmsg *h;
-
-	if ((h = (struct hmsg *)malloc(MAX_HMSGSIZE)) == NULL)
-		fatal(NULL);
-	ctl_msg_init(h, HMSG_GET_VLANS);
-	strlcpy((char *)&h->data, interface, IFNAMSIZ);
-	memcpy((char*)&h->data + IFNAMSIZ, &nb, sizeof(int));
-	h->hdr.len += IFNAMSIZ + sizeof(int);
-	if (ctl_msg_send(s, h) == -1)
-		fatalx("get_vlans: unable to send request");
-	if (ctl_msg_recv(s, h) == -1)
-		fatalx("get_vlans: unable to receive answer");
-	if (h->hdr.type != HMSG_GET_VLANS)
-		fatalx("get_vlans: unknown answer type received");
-	p = &h->data;
-	if (ctl_msg_unpack_list(STRUCT_LLDPD_VLAN,
-		vls, sizeof(struct lldpd_vlan), h, &p) == -1)
-		fatalx("get_vlans: unable to retrieve the list of vlans");
-	return 1;
-}
-#endif
-
-static int
-get_chassis(int s, struct lldpd_chassis *chassis, char *interface, int nb)
-{
-	struct hmsg *h;
-	void *p;
-
-	if ((h = (struct hmsg *)malloc(MAX_HMSGSIZE)) == NULL)
-		fatal(NULL);
-	ctl_msg_init(h, HMSG_GET_CHASSIS);
-	strlcpy((char *)&h->data, interface, IFNAMSIZ);
-	memcpy((char*)&h->data + IFNAMSIZ, &nb, sizeof(int));
-	h->hdr.len += IFNAMSIZ + sizeof(int);
-	if (ctl_msg_send(s, h) == -1)
-		fatalx("get_chassis: unable to send request to get chassis");
-	if (ctl_msg_recv(s, h) == -1)
-		fatalx("get_chassis: unable to receive answer to get chassis");
-	if (h->hdr.type == HMSG_NONE)
-		/* No chassis */
-		return -1;
-	p = &h->data;
-	if (ctl_msg_unpack_structure(STRUCT_LLDPD_CHASSIS,
-		chassis, sizeof(struct lldpd_chassis), h, &p) == -1) {
-		LLOG_WARNX("unable to retrieve chassis for %s", interface);
-		fatalx("get_chassis: abort");
-	}
-	return 1;
-}
-
-static int
-get_port(int s, struct lldpd_port *port, char *interface, int nb)
-{
-	struct hmsg *h;
-	void *p;
-
-	if ((h = (struct hmsg *)malloc(MAX_HMSGSIZE)) == NULL)
-		fatal(NULL);
-	ctl_msg_init(h, HMSG_GET_PORT);
-	strlcpy((char *)&h->data, interface, IFNAMSIZ);
-	memcpy((char*)&h->data + IFNAMSIZ, &nb, sizeof(int));
-	h->hdr.len += IFNAMSIZ + sizeof(int);
-	if (ctl_msg_send(s, h) == -1)
-		fatalx("get_port: unable to send request to get port");
-	if (ctl_msg_recv(s, h) == -1)
-		fatalx("get_port: unable to receive answer to get port");
-	if (h->hdr.type == HMSG_NONE)
-		/* No port */
-		return -1;
-	p = &h->data;
-	if (ctl_msg_unpack_structure(STRUCT_LLDPD_PORT,
-		port, sizeof(struct lldpd_port), h, &p) == -1) {
-		LLOG_WARNX("unable to retrieve port information for %s",
-		    interface);
-		fatalx("get_chassis: abort");
-	}
-	return 1;
-}
-
-static int
-get_nb_port(int s, char *interface)
-{
-	struct hmsg *h;
-	int nb;
-
-	if ((h = (struct hmsg *)malloc(MAX_HMSGSIZE)) == NULL)
-		fatal(NULL);
-	ctl_msg_init(h, HMSG_GET_NB_PORTS);
-	strlcpy((char *)&h->data, interface, IFNAMSIZ);
-	h->hdr.len += IFNAMSIZ;
-	if (ctl_msg_send(s, h) == -1)
-		fatalx("get_nb_port: unable to send request to get number of ports");
-	if (ctl_msg_recv(s, h) == -1)
-		fatalx("get_nb_port: unable to receive answer to get number of ports");
-	if (h->hdr.type == HMSG_NONE)
-		return -1;
-	if (h->hdr.len != sizeof(int))
-		fatalx("get_nb_port: bad message length");
-	memcpy(&nb, &h->data, sizeof(int));
-	return nb;
 }
 
 static void
@@ -671,24 +578,24 @@ display_med(struct writer *w, struct lldpd_chassis *chassis, struct lldpd_port *
 			tag_end(w);
 		}
 	}
-	if (port->p_med_pow_devicetype) {
+	if (port->p_med_power.devicetype) {
 		tag_start(w, "poe", "Extended Power-over-Ethernet");
 
 		tag_start(w, "device-type", "Power Type & Source");
-		tag_data(w, map_lookup(port_med_pow_devicetype_map, port->p_med_pow_devicetype));
+		tag_data(w, map_lookup(port_med_pow_devicetype_map, port->p_med_power.devicetype));
 		tag_end(w);
 
 		tag_start(w, "source", "Power Source");
-		tag_data(w, map_lookup(port_med_pow_source_map, port->p_med_pow_source));
+		tag_data(w, map_lookup(port_med_pow_source_map, port->p_med_power.source));
 		tag_end(w);
 		
 		tag_start(w, "priority", "Power Priority");
-		tag_data(w, map_lookup(port_med_pow_priority_map, port->p_med_pow_priority));
+		tag_data(w, map_lookup(port_med_pow_priority_map, port->p_med_power.priority));
 		tag_end(w);
 
-		if(port->p_med_pow_val < 1024) {
+		if(port->p_med_power.val < 1024) {
 			tag_start(w, "power", "Power Value");
-			tag_data(w, u2str(port->p_med_pow_val * 100));
+			tag_data(w, u2str(port->p_med_power.val * 100));
 			tag_end(w);
 		}
 		tag_end(w);
@@ -735,6 +642,10 @@ static void
 display_chassis(struct writer * w, struct lldpd_chassis *chassis)
 {
 	char *cid;
+	struct in_addr ip;
+	struct lldpd_mgmt *mgmt;
+	char addrbuf[INET6_ADDRSTRLEN];
+
 	if ((cid = (char *)malloc(chassis->c_id_len + 1)) == NULL)
 		fatal(NULL);
 	memcpy(cid, chassis->c_id, chassis->c_id_len);
@@ -755,7 +666,8 @@ display_chassis(struct writer * w, struct lldpd_chassis *chassis)
 		break;
 	case LLDP_CHASSISID_SUBTYPE_ADDR:
 		if (*(u_int8_t*)chassis->c_id == 1) {
-			tag_data(w, inet_ntoa(*(struct in_addr*)(chassis->c_id + 1)));
+			memcpy(&ip, chassis->c_id + 1, sizeof(struct in_addr));
+			tag_data(w, inet_ntoa(ip));
 			break;
 		}
 	case LLDP_CHASSISID_SUBTYPE_PORT:
@@ -769,8 +681,18 @@ display_chassis(struct writer * w, struct lldpd_chassis *chassis)
 	tag_datatag(w, "name", "SysName", chassis->c_name);
 	tag_datatag(w, "descr", "SysDescr", chassis->c_descr);
 
-	if (chassis->c_mgmt.s_addr != INADDR_ANY)
-		tag_datatag(w, "mgmt-ip", "MgmtIP", inet_ntoa(chassis->c_mgmt));
+	TAILQ_FOREACH(mgmt, &chassis->c_mgmt, m_entries) {
+		memset(addrbuf, 0, sizeof(addrbuf));
+		inet_ntop(lldpd_af(mgmt->m_family), &mgmt->m_addr, addrbuf, sizeof(addrbuf));
+		switch (mgmt->m_family) {
+		case LLDPD_AF_IPV4:
+			tag_datatag(w, "mgmt-ip", "MgmtIP", addrbuf);
+			break;
+		case LLDPD_AF_IPV6:
+			tag_datatag(w, "mgmt-ip6", "MgmtIPv6", addrbuf);
+			break;
+		}
+	}
 
 	display_cap(w, chassis, LLDP_CAP_OTHER, "Other");
 	display_cap(w, chassis, LLDP_CAP_REPEATER, "Repeater");
@@ -788,14 +710,14 @@ display_chassis(struct writer * w, struct lldpd_chassis *chassis)
 static void
 display_autoneg(struct writer * w, struct lldpd_port *port, int bithd, int bitfd, char *desc)
 {
-	if (!((port->p_autoneg_advertised & bithd) ||
-		(port->p_autoneg_advertised & bitfd)))
+	if (!((port->p_macphy.autoneg_advertised & bithd) ||
+		(port->p_macphy.autoneg_advertised & bitfd)))
 		return;
 
 	tag_start(w, "advertised", "Adv");
 	tag_attr(w, "type", "", desc);
-	tag_attr(w, "hd", "HD", (port->p_autoneg_advertised & bithd)?"yes":"no");
-	tag_attr(w, "fd", "FD", (port->p_autoneg_advertised)?"yes":"no");
+	tag_attr(w, "hd", "HD", (port->p_macphy.autoneg_advertised & bithd)?"yes":"no");
+	tag_attr(w, "fd", "FD", (port->p_macphy.autoneg_advertised)?"yes":"no");
 	tag_end (w);
 }
 #endif
@@ -849,13 +771,15 @@ display_port(struct writer * w, struct lldpd_port *port)
 		tag_datatag(w, "aggregation", " Port is aggregated. PortAggregID",
 		            u2str(port->p_aggregid));
 
-	if (port->p_autoneg_support || port->p_autoneg_enabled ||
-	    port->p_mau_type) {
+	if (port->p_macphy.autoneg_support || port->p_macphy.autoneg_enabled ||
+	    port->p_macphy.mau_type) {
 		tag_start(w, "auto-negotiation", "PMD autoneg");
-		tag_attr (w, "supported", "supported", port->p_autoneg_support?"yes":"no");
-		tag_attr (w, "enabled", "enabled", port->p_autoneg_enabled?"yes":"no");
+		tag_attr (w, "supported", "supported",
+		    port->p_macphy.autoneg_support?"yes":"no");
+		tag_attr (w, "enabled", "enabled",
+		    port->p_macphy.autoneg_enabled?"yes":"no");
 
-		if (port->p_autoneg_enabled) {
+		if (port->p_macphy.autoneg_enabled) {
 			display_autoneg(w, port, LLDP_DOT3_LINK_AUTONEG_10BASE_T,
 			    LLDP_DOT3_LINK_AUTONEG_10BASET_FD,
 			    "10Base-T");
@@ -873,7 +797,58 @@ display_port(struct writer * w, struct lldpd_port *port)
 			    "1000Base-T");
 		}
 		tag_datatag(w, "current", "MAU oper type",
-			map_lookup(operational_mau_type_values, port->p_mau_type));
+			map_lookup(operational_mau_type_values, port->p_macphy.mau_type));
+		tag_end(w);
+	}
+	if (port->p_power.devicetype) {
+		tag_start(w, "power", "MDI Power");
+		tag_attr(w, "supported", "supported",
+		    port->p_power.supported?"yes":"no");
+		tag_attr(w, "enabled", "enabled",
+		    port->p_power.enabled?"yes":"no");
+		tag_attr(w, "paircontrol", "pair control",
+		    port->p_power.paircontrol?"yes":"no");
+		tag_start(w, "device-type", "Device type");
+		tag_data(w, map_lookup(port_dot3_power_devicetype_map,
+			port->p_power.devicetype));
+		tag_end(w);
+		tag_start(w, "pairs", "Power pairs");
+		tag_data(w, map_lookup(port_dot3_power_pairs_map,
+			port->p_power.pairs));
+		tag_end(w);
+		tag_start(w, "class", "Class");
+		tag_data(w, map_lookup(port_dot3_power_class_map,
+			port->p_power.class));
+		tag_end(w);
+
+		/* 802.3at */
+		if (port->p_power.powertype != LLDP_DOT3_POWER_8023AT_OFF) {
+			tag_start(w, "power-type", "Power type");
+			tag_data(w, u2str(port->p_power.powertype));
+			tag_end(w);
+
+			tag_start(w, "source", "Power Source");
+			tag_data(w, map_lookup(
+				    (port->p_power.devicetype == LLDP_DOT3_POWER_PSE)?
+					port_dot3_power_pse_source_map:
+					port_dot3_power_pd_source_map,
+					port->p_power.source));
+			tag_end(w);
+
+			tag_start(w, "priority", "Power Priority");
+			tag_data(w, map_lookup(port_dot3_power_priority_map,
+				port->p_power.priority));
+			tag_end(w);
+
+			tag_start(w, "requested", "PD requested power Value");
+			tag_data(w, u2str(port->p_power.requested * 100));
+			tag_end(w);
+
+			tag_start(w, "allocated", "PSE allocated power Value");
+			tag_data(w, u2str(port->p_power.allocated * 100));
+			tag_end(w);
+		}
+
 		tag_end(w);
 	}
 #endif
@@ -892,7 +867,7 @@ display_vlans(struct writer *w, struct lldpd_port *port)
 
 		tag_start(w, "vlan", "VLAN");
 		tag_attr(w, "vlan-id", "", u2str(vlan->v_vid));
-		if (foundpvid)
+		if (port->p_pvid == vlan->v_vid)
 			tag_attr(w, "pvid", "pvid", "yes");
 		tag_data(w, vlan->v_name);
 		tag_end(w);
@@ -902,6 +877,41 @@ display_vlans(struct writer *w, struct lldpd_port *port)
 		tag_attr(w, "vlan-id", "", u2str(port->p_pvid));
 		tag_attr(w, "pvid", "pvid", "yes");
 		tag_end(w);
+	}
+}
+
+static void
+display_ppvids(struct writer *w, struct lldpd_port *port)
+{
+	struct lldpd_ppvid *ppvid;
+	TAILQ_FOREACH(ppvid, &port->p_ppvids, p_entries) {
+		tag_start(w, "ppvid", "PPVID");
+		if (ppvid->p_ppvid)
+			tag_attr(w, "value", "", u2str(ppvid->p_ppvid));
+		tag_attr(w, "supported", "supported",
+			 (ppvid->p_cap_status & LLDPD_PPVID_CAP_SUPPORTED)?"yes":"no");
+		tag_attr(w, "enabled", "enabled",
+			 (ppvid->p_cap_status & LLDPD_PPVID_CAP_ENABLED)?"yes":"no");
+		tag_end(w);
+	}
+}
+
+static void
+display_pids(struct writer *w, struct lldpd_port *port)
+{
+	struct lldpd_pi *pi;
+	char *hex;
+	TAILQ_FOREACH(pi, &port->p_pids, p_entries) {
+		if (!pi->p_pi_len) continue;
+		tag_start(w, "pi", "PI");
+		/* Convert to hex for display */
+		if ((hex = malloc(pi->p_pi_len * 2 + 1)) == NULL)
+			fatal(NULL);
+		for (int i = 0; i < pi->p_pi_len; i++)
+			snprintf(hex + 2*i, 3, "%02X", (unsigned char)pi->p_pi[i]);
+		tag_data(w, hex);
+		tag_end(w);
+		free(hex);
 	}
 }
 #endif
@@ -924,21 +934,14 @@ display_age(struct lldpd_port *port)
 }
 
 void
-display_interfaces(int s, const char * fmt, int argc, char *argv[])
+display_interfaces(int s, const char * fmt, int hidden, int argc, char *argv[])
 {
+	int i;
 	struct writer * w;
-	int i, nb;
-	struct interfaces ifs;
-#ifdef ENABLE_DOT1
-	struct vlans vls;
-#endif
-	struct lldpd_interface *iff;
-	struct lldpd_chassis chassis;
-	struct lldpd_port port;
-	char sep[80];
-
 	if ( strcmp(fmt,"plain") == 0 ) {
 		w = txt_init( stdout );
+	} else if (strcmp(fmt, "keyvalue") == 0) {
+		w = kv_init( stdout );
 	}
 #ifdef USE_XML
 	else if ( strcmp(fmt,"xml") == 0 ) {
@@ -949,13 +952,15 @@ display_interfaces(int s, const char * fmt, int argc, char *argv[])
 		w = txt_init( stdout );
 	}
 
+	char sep[80];
 	memset(sep, '-', 79);
 	sep[79] = 0;
-	get_interfaces(s, &ifs);
 
+	struct lldpd_interface *iff;
+	struct lldpd_interface_list *ifs = get_interfaces(s);
 	tag_start(w, "lldp", "LLDP neighbors");
 	
-	TAILQ_FOREACH(iff, &ifs, next) {
+	TAILQ_FOREACH(iff, ifs, next) {
 		if (optind < argc) {
 			for (i = optind; i < argc; i++)
 				if (strncmp(argv[i], iff->name, IFNAMSIZ) == 0)
@@ -963,29 +968,38 @@ display_interfaces(int s, const char * fmt, int argc, char *argv[])
 			if (i == argc)
 				continue;
 		}
-		nb = get_nb_port(s, iff->name);
-		for (i = 0; i < nb; i++) {
-			if (!((get_chassis(s, &chassis, iff->name, i) != -1) &&
-				(get_port(s, &port, iff->name, i) != -1)))
-				continue;
+		
+		struct lldpd_port *port;
+		struct lldpd_chassis *chassis;
+		struct lldpd_hardware *hardware = get_interface(s, iff->name);
+		if (TAILQ_EMPTY(&hardware->h_rports))
+			continue;
+		TAILQ_FOREACH(port, &hardware->h_rports, p_entries) {
+			if (!hidden && SMART_HIDDEN(port)) continue;
+			chassis = port->p_chassis;
+
 			tag_start(w, "interface", "Interface");
 			tag_attr(w, "name", "", iff->name );
-			tag_attr(w, "via" , "via", map_lookup(lldpd_protocol_map, port.p_protocol));
-			tag_attr(w, "rid" , "RID", u2str(chassis.c_index));
-			tag_attr(w, "age" , "Time", display_age(&port));
+			tag_attr(w, "via" , "via", map_lookup(lldpd_protocol_map, port->p_protocol));
+			tag_attr(w, "rid" , "RID", u2str(chassis->c_index));
+			tag_attr(w, "age" , "Time", display_age(port));
 
-			display_chassis(w,&chassis);
-			display_port(w, &port);
+			display_chassis(w,chassis);
+			display_port(w, port);
 #ifdef ENABLE_DOT1
-			if (get_vlans(s, &vls, iff->name, i) != -1)
-				memcpy(&port.p_vlans, &vls, sizeof(struct vlans));
-			if (!TAILQ_EMPTY(&port.p_vlans) || port.p_pvid) {
-				display_vlans(w, &port);
+			if (!TAILQ_EMPTY(&port->p_vlans) || port->p_pvid) {
+				display_vlans(w, port);
+			}
+			if (!TAILQ_EMPTY(&port->p_ppvids)) {
+				display_ppvids(w, port);
+			}
+			if (!TAILQ_EMPTY(&port->p_pids)) {
+				display_pids(w, port);
 			}
 #endif
 #ifdef ENABLE_LLDPMED
-			if (port.p_med_cap_enabled) {
-				display_med(w, &chassis, &port);
+			if (port->p_med_cap_enabled) {
+				display_med(w, chassis, port);
 			}
 #endif
 			tag_end(w); /* interface */
@@ -995,4 +1009,3 @@ display_interfaces(int s, const char * fmt, int argc, char *argv[])
 	tag_end(w);
 	w->finish(w);
 }
-

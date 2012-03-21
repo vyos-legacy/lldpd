@@ -32,3 +32,23 @@ ID
 /src/lldpctl
 /src/lldpd
 /tests/Makefile
+build/
+
+# autotools stuff
+Makefile.in
+m4/lt*.m4
+m4/libtool.m4
+aclocal.m4
+ltmain.sh
+install-sh
+config.guess
+config.h.in
+config.sub
+autom4te.cache/
+compile
+configure
+depcomp
+missing
+
+# cscope
+cscope.*

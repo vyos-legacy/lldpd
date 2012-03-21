@@ -9,30 +9,35 @@
 
 ### BEGIN INIT INFO
 # Provides: lldpd
-# Required-Start: $local_fs $network
-# Required-Stop: $local_fs $network
-# Should-Start: 
-# Should-Stop: 
-# Default-Start: 
-# Default-Stop: 
-# Short-Description: start and stop LLDP daemon
+# Required-Start: $local_fs $remote_fs
+# Required-Stop: $local_fs $remote_fs
+# Should-Start: $syslog $network $net-snmp
+# Should-Stop: $syslog $network $net-snmp
+# Default-Start: 2 3 5
+# Default-Stop: 0 1 6
+# Short-Description: LLDP daemon
 # Description: 802.1ab (LLDP) daemon
 ### END INIT INFO
 
 # source function library
-. /etc/init.d/functions
+. /etc/rc.d/init.d/functions
 
-
-OPTIONS=""
-if [ -e /etc/sysconfig/lldpd ]; then
-  . /etc/sysconfig/lldpd
-fi
+LLDPD_OPTIONS=""
+[ -e /etc/sysconfig/lldpd ] && . /etc/sysconfig/lldpd
 
 RETVAL=0
 prog="lldpd"
 binary=/usr/sbin/lldpd
 pidfile=/var/run/lldpd.pid
 chroot=/var/run/lldpd
+lockfile=/var/lock/subsys/$prog
+
+# Determine if we can use the -p option to daemon, killproc, and status.
+# RHEL < 5 can't.
+if status | grep -q -- '-p' 2>/dev/null; then
+    daemonopts="--pidfile $pidfile"
+    pidopts="-p $pidfile"
+fi
 
 build_chroot()
 {
@@ -41,6 +46,7 @@ build_chroot()
         [ -d $chroot/etc ] || mkdir -p $chroot/etc
         [ -f $chroot/etc/localtime ] || [ ! -f /etc/localtime ] || \
                 cp /etc/localtime $chroot/etc/localtime
+	export TZ=/etc/localtime
         umask $oldumask
 }
 
@@ -52,9 +58,9 @@ start() {
                 failure
         else
 		build_chroot
-                daemon --pidfile=$pidfile $binary $OPTIONS
+                daemon $daemonopts $binary $LLDPD_OPTIONS
                 RETVAL=$?
-                [ $RETVAL -eq 0 ] && touch /var/lock/subsys/lldpd
+                [ $RETVAL -eq 0 ] && touch $lockfile
         fi;
         echo 
         return $RETVAL
@@ -66,18 +72,10 @@ stop() {
                 RETVAL=1
                 failure
         else
-                killproc -p $pidfile $binary
+                killproc $pidopts $binary
                 RETVAL=$?
-                [ $RETVAL -eq 0 ] && rm -f /var/lock/subsys/lldpd
+                [ $RETVAL -eq 0 ] && rm -f $lockfile
         fi;
-        echo
-        return $RETVAL
-}
-
-reload(){
-        echo -n $"Reloading $prog: "
-        killproc -p $pidfile $binary -HUP
-        RETVAL=$?
         echo
         return $RETVAL
 }
@@ -88,16 +86,22 @@ restart(){
 }
 
 condrestart(){
-    [ -e /var/lock/subsys/lldpd ] && restart
+    [ -e $lockfile ] && restart
     return 0
+}
+
+rh_status_q(){
+    status $pidopts $prog >/dev/null 2>&1
 }
 
 case "$1" in
   start)
+	rh_status_q && exit 0
 	start
 	RETVAL=$?
 	;;
   stop)
+	rh_status_q || exit 0
 	stop
 	RETVAL=$?
 	;;
@@ -106,19 +110,24 @@ case "$1" in
 	RETVAL=$?
         ;;
   reload)
-	reload
+        rh_status_q || exit 7
+	exit 3
+        ;;
+  force-reload)
+	restart
 	RETVAL=$?
         ;;
   condrestart|try-restart)
+        rh_status_q || exit 0
 	condrestart
 	RETVAL=$?
 	;;
   status)
-        status lldpd
+        status $pidopts $prog
 	RETVAL=$?
         ;;
   *)
-	echo $"Usage: $0 {start|stop|status|restart|condrestart|reload}"
+	echo $"Usage: $0 {start|stop|status|restart|condrestart|force-reload}"
 	RETVAL=2
 esac
 

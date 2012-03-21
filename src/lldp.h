@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2008 Vincent Bernat <bernat@luffy.cx>
  *
- * Permission to use, copy, modify, and distribute this software for any
+ * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
  * copyright notice and this permission notice appear in all copies.
  *
@@ -119,6 +119,32 @@ enum {
 #define LLDP_DOT3_MAU_10GIGBASELW 39
 #define LLDP_DOT3_MAU_10GIGBASESW 40
 
+/* Dot3 Power Devicetype */
+#define LLDP_DOT3_POWER_PSE 1
+#define LLDP_DOT3_POWER_PD 2
+
+/* Dot3 Power Pairs (RFC 3621) */
+#define LLDP_DOT3_POWERPAIRS_SIGNAL 1
+#define LLDP_DOT3_POWERPAIRS_SPARE 2
+
+/* Dot3 Power type (for 802.3at) */
+#define LLDP_DOT3_POWER_8023AT_OFF 0
+#define LLDP_DOT3_POWER_8023AT_TYPE1 1
+#define LLDP_DOT3_POWER_8023AT_TYPE2 2
+
+/* Dot3 power source */
+#define LLDP_DOT3_POWER_SOURCE_UNKNOWN 0
+#define LLDP_DOT3_POWER_SOURCE_PRIMARY 1
+#define LLDP_DOT3_POWER_SOURCE_PSE 1
+#define LLDP_DOT3_POWER_SOURCE_BACKUP 2
+#define LLDP_DOT3_POWER_SOURCE_BOTH 3
+
+/* Dot3 power priority */
+#define LLDP_DOT3_POWER_PRIO_UNKNOWN 0
+#define LLDP_DOT3_POWER_PRIO_CRITICAL 1
+#define LLDP_DOT3_POWER_PRIO_HIGH 2
+#define LLDP_DOT3_POWER_PRIO_LOW 3
+
 /* PMD Auto-Negotiation Advertised Capability field, from RFC 3636 */
 #define LLDP_DOT3_LINK_AUTONEG_OTHER		0x8000
 #define LLDP_DOT3_LINK_AUTONEG_10BASE_T		0x4000
@@ -148,6 +174,7 @@ enum {
 
 /* see http://www.iana.org/assignments/address-family-numbers */
 enum {
+	LLDP_MGMT_ADDR_NONE	= 0,
 	LLDP_MGMT_ADDR_IP4	= 1,
 	LLDP_MGMT_ADDR_IP6	= 2
 };
@@ -172,6 +199,7 @@ enum {
 	LLDP_TLV_MED_IV_MODEL	= 10,
 	LLDP_TLV_MED_IV_ASSET	= 11
 };
+#endif
 
 #define LLDPMED_CLASS_I 1
 #define LLDPMED_CLASS_II 2
@@ -205,10 +233,10 @@ enum {
 #define LLDPMED_POW_SOURCE_LOCAL 6
 #define LLDPMED_POW_SOURCE_BOTH 7
 
-#define LLDPMED_POW_PRIO_UNKNOWN 1
-#define LLDPMED_POW_PRIO_CRITICAL 2
-#define LLDPMED_POW_PRIO_HIGH 3
-#define LLDPMED_POW_PRIO_LOW 4
+#define LLDPMED_POW_PRIO_UNKNOWN 0
+#define LLDPMED_POW_PRIO_CRITICAL 1
+#define LLDPMED_POW_PRIO_HIGH 2
+#define LLDPMED_POW_PRIO_LOW 3
 
 #define LLDPMED_CAP_CAP 0x01
 #define LLDPMED_CAP_POLICY 0x02
@@ -216,7 +244,5 @@ enum {
 #define LLDPMED_CAP_MDI_PSE 0x08
 #define LLDPMED_CAP_MDI_PD 0x10
 #define LLDPMED_CAP_IV 0x20
-
-#endif /* ENABLE_LLDPMED */
 
 #endif /* _LLDP_H */
