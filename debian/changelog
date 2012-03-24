@@ -1,3 +1,228 @@
+lldpd (0.6.0+vyatta+2) unstable; urgency=low
+
+  [ Vincent Bernat ]
+  * Add a summary of available options in usage() of lldpd and lldpctl
+  * Use some conditionals to display some command line options.
+  * Add "format" option.
+  * Add specifically a "-h" switch for lldpd and lldpctl
+  * Allow to force a protocol.
+  * Fix hang issue in select() loop with SNMP.
+  * Initialize changelog for 0.5.1.
+  * Allow to set LLDP-MED network policy TLV from lldpctl.
+  * Allow lldpctl to set both location and policy at the same time.
+  * Add a CHANGELOG entry about setting network policy from lldpctl.
+  * Add proper credit in CHANGELOG for network policy.
+  * Adapt unittests to consider LLDP-MED network policy TLV.
+  * Fix installation of CHANGELOG file in lldpd.spec.
+  * Ensure that documentation is installed in the right place.
+  * Add SNMP support for lldpXMedLocMediaPolicyTable.
+  * Add SNMP support for lldpXMedRemLocationTable.
+  * Move LLDP-MED POE stuff into a dedicated structure.
+  * Allow to set LLDP-MED POE-MDI TLV from lldpctl.
+  * Add a CHANGELOG entry about setting LLDP-MED POE-MDI from lldpctl.
+  * Update unittests for LLDP-MED POE-MDI TLV.
+  * List MDI/PSE and MDI/PD as an available LLDP-MED capability for the
+    chassis.
+  * Add SNMP support of lldpXMedPoE stuff.
+  * Add a new output for lldpctl: keyvalue.
+
+  [ Stig Thormodsrud ]
+  * Add -S <system_description> override.
+
+  [ Vincent Bernat ]
+  * Add an entry to the manual page for -S option.
+  * Typo in usage string of lldpd
+  * Ignore interfaces with no queue.
+  * Blacklist VMWare interfaces (as per ticket #40).
+  * Revert "Blacklist VMWare interfaces (as per ticket #40)."
+  * Don't try to guess FD_SETSIZE correct value when cross-compiling.
+  * Fix AC_CHECK_DECLS macro in configure.ac
+  * Fix an unaligned access when chassis ID is an IP address.
+  * Fix additional alignment issues for ARM platform.
+  * Make AM_SILENT_RULES optional.
+  * lldpd.spec: requires openssl since it is required by net-snmp
+  * configure: try to use -Wl,--as-needed if possible
+  * Remove "listen on VLAN" feature.
+  * Listen on VLAN using an appropriate BPF filter and VLAN
+    decapsulation.
+  * Don't check CDP checksums.
+  * If available, use the output of lsb_release for system description.
+  * Group together related configuration information.
+  * Add prototype for lldpd_get_lsb_release().
+  * Revert "configure: try to use -Wl,--as-needed if possible"
+  * Add smart mode support.
+  * Prepare for release.
+  * Be compatible with RHEL4.
+  * Fix compilation on RHEL and Fedora 13.
+  * Fix .spec for SuSE.
+  * Fix compilation with RHEL 5.
+  * net-snmp/agent/utils_func.h header is useless in agent_priv.c
+  * Avoid linking lldpd to libxml2 and lldpctl to libnetsnmp.
+  * Provide an initscript targetted at SuSE.
+  * Sync Debian packaging with official packaging.
+  * [lldpctl] Fix a spelling error
+  * Reenable SNMP support on Fedora 13.
+  * Harden lldpd with the use of RELRO and NOW linker options.
+  * Patch to keep wifi and bridge cap when updating chassis.
+  * Fix AX_CFLAGS_GCC_OPTION to make it work with autoconf 2.67.
+  * More flexible smart mode and new default.
+  * Hide unwanted remote ports just after receiving information about
+    them.
+  * Add a receive-only mode with "-r" switch.
+  * Add receive-only mode switch "-r" to usage()
+  * Add autogen.sh from buildconf.
+  * Add AM_MAINTAINER_MODE macro to configure.ac.
+  * Prepare for release (0.5.2).
+  * Allow root to change configuration of lldpd when lldpctl has suid
+    set
+  * Move Dot3 MAC/Phy stuff into a separate structure.
+  * Add initial Dot3/802.3at support
+  * Allow to set Dot3 POE-MDI TLV from lldpctl.
+  * Add changelog entries about 802.3af/Dot3 POE-MDI support.
+  * Add support for 802.3at.
+  * Move 802.3af/802.3at changelog entry in the appropriate section.
+  * Suppress a new warning from GCC 4.5 (unused value).
+  * Translate README into its markdown equivalent
+  * Update ISC license wording.
+
+  [ Michael Tremer ]
+  * Add support to read /etc/os-release for system information.
+
+  [ Vincent Bernat ]
+  * Add changelog entry for use of /etc/os-release
+  * Remove an unused variable.
+  * README is now README.md. Update Makefile.am.
+  * Add a way to specify which interfaces lldpd should listen to.
+  * Release 0.5.4.
+  * ifaddrs: remove unused variable
+  * lldp: ensure that boolean values are really boolean
+
+  [ Dean Hamstead ]
+  * lldpd: update software version to match man page
+
+  [ Vincent Bernat ]
+  * cdp: Add CDP_CAP_HOST to outgoing CDP packets
+  * Fix key/value output was incorrect when an interface name contains a
+    dot.
+
+  [ Shuah Khan ]
+  * Fix - lldpd netsnmp sub-agent segfaults when null write_method is
+    passed in
+  * IEEE 802.1 2005 TLV enhancement - PPVID and PI added
+
+  [ Vincent Bernat ]
+  * [configure] Fix a typo in help message
+  * Some fixes for PPVID and PI.
+  * [lldpctl] Fix PVID value when displaying VLANs.
+  * Add support of PPVID and PI in changelog
+
+  [ Shuah Khan ]
+  * IEEE 802.1 2005 TLV Unit tests
+
+  [ Vincent Bernat ]
+  * [check] Add length when encoding Dot1 PI TLV
+  * SNMP: Dot1 PPVID, PPVLAN and VLANID support, contributed by Shuah
+    Khan
+  * snmp: Dot1 PI support, contributed by Shuah Khan
+  * snmp: use a 16-bit checksum, not a 15-bit one.
+  * lldpd: Only grab DMI information once.
+  * dmi: only enable DMI for x86 platforms
+  * Don't pack struct hmsg since we are not able to do unaligned access
+    on some archs.
+  * Fix a segfault when neither /etc/os-release not lsb_release is
+    available.
+  * Extend whitelist with possibility to blacklist.
+  * Prepare 0.5.5 release.
+  * Fix a missing semi colon.
+  * Spelling corrections
+  * Export TZ=/etc/localtime to fix timestamps.
+
+  [ Christopher Johnston ]
+  * /trabmission/tranmission/
+
+  [ Vincent Bernat ]
+  * cdp: allow reception of native vlan
+  * cdp: send native VLAN TLV
+  * cdp: send native VLAN only with CDPv2
+  * Don't send MFS equal to 0.
+  * Add a whitelist for some drivers (currently: dsa and veth)
+  * Whitelisted driver is not a very informative information. Remove it.
+  * configure: check more SNMP stuff.
+  * core: optimize BPF filter
+  * snmp: turn the "try next OID" code block into a macro to avoid
+    errors
+
+  [ Shuah Khan ]
+  * frame.h uses very generic memeber names that resusts in conflicts
+    with other defines
+
+  [ Vincent Bernat ]
+  * Continuation of the previous patch.
+  * snmp: rework indexing
+  * snmp: use a header_*indexed function for local management address
+  * snmp: factorisation of local/remote handlers
+  * snmp: factorisation of local/remote port handlers
+  * snmp: factorisation of agent_h_*med*() functions
+  * Start branch 0.6.
+  * tests: Simplify Makefile.am
+  * snmp: add unit tests
+  * snmp: ensure single inclusion of agent.h header
+  * tests: only compile check_snmp if SNMP support is available
+  * Add a new serialization engine.
+  * marshal: use shorter macro names
+  * marshal: allow to specify null-terminated strings
+  * marshal: handle fixed-size strings
+  * marshal: add a way to ignore a pointer (setting it to NULL)
+  * configure: fix an issue with netsnmp_enable_subagent detection
+  * Point to appropriate LLDP page on Wikipedia instead of
+    disambiguation page.
+  * core: SMART_HIDDEN macro does not really need the configuration
+  * marshal: fix list marshalling and various other changes
+  * Major rewrite: rewrite lldpd/lldpctl communication mechanism
+  * Compilation fixes when disabling some part of lldpd
+  * Use LIBADD instead of LDADD when appropriate.
+  * Add missing lldpctl.h header file
+  * Provide a .gitignore.
+  * Update CHANGELOG with actual changes from 0.5.6.
+  * lldpctl: add a flag to display hidden ports
+  * interfaces: remove unneeded forward declarations
+  * lldpd: remove unneeded forward declarations
+  * Change the way Chassis ID is assigned.
+  * Add a flag to specify which interfaces to use for chassis ID.
+  * Use %zu for printf() when argument is of kind size_t.
+  * tests: when comparing port ID and chassis ID, uses strncmp
+  * marshal: circumvent cast alignment problems using memcpy
+  * redhat: make the init script compatible with RHEL < 5
+  * cdp: allow to override value of platform TLV (Linux by default)
+  * snmp: better integration of SNMP logging subsystem
+  * lldpd: do not stay stuck in the receive loop
+  * lldpd: add interface to message about unguessable frame type
+  * configure: automatically compute version from git
+  * lldpd: add a better error message when we cannot create the unix
+    socket
+  * tests: fix location of .h files (they are in top_srcdir, not in
+    top_builddir)
+
+  [ João Valverde ]
+  * Support for multiple IPv4/IPv6 management addresses.
+
+  [ Vincent Bernat ]
+  * cdp: allow to send several IP addresses
+  * edp: steal IP addresses from the received chassis instead of copying
+    them
+  * mgmt: free management addresses when freeing the chassis
+  * edp: ensure we don't add the same address over and over
+  * snmp: fix SNMP support for management addresses
+  * snmp: add support for IPv6 management addresses
+  * Update CHANGELOG with entry about management addresses.
+  * mgmt: allow one to provide a pattern to specify management addresses
+
+  [ John Southworth ]
+  * Cleanup build process
+  * Clean up autogen usage and update version number
+
+ -- John Southworth <john.southworth@vyatta.com>  Sat, 24 Mar 2012 07:38:27 -0700
+
 lldpd (0.6.0+vyatta+1) unstable; urgency=low
 
   * Merge with new upstream
