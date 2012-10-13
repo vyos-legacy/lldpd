@@ -1,3 +1,9 @@
+lldpd (0.6.0+vyatta+3) unstable; urgency=low
+
+  * new branch
+
+ -- John Southworth <john.southworth@vyatta.com>  Fri, 12 Oct 2012 19:45:36 -0700
+
 lldpd (0.6.0+vyatta+2) unstable; urgency=low
 
   [ Vincent Bernat ]
