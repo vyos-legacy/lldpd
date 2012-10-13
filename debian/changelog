@@ -1,3 +1,9 @@
+lldpd (0.6.0+vyatta+3+daisy1) unstable; urgency=low
+
+  * create daisy branch
+
+ -- John Southworth <john.southworth@vyatta.com>  Sat, 13 Oct 2012 13:29:50 -0700
+
 lldpd (0.6.0+vyatta+3) unstable; urgency=low
 
   * new branch
