@@ -1,3 +1,9 @@
+lldpd (0.6.0+vyos1+helium1) unstable; urgency=low
+
+  * New branch
+
+ -- Daniil Baturin <daniil@baturin.org>  Sat, 15 Feb 2014 15:17:11 +0100
+
 lldpd (0.6.0+vyatta+3+hydrogen1) unstable; urgency=low
 
   * New branch
