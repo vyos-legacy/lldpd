@@ -1,3 +1,9 @@
+lldpd (0.6.0+vyos2+lithium2) unstable; urgency=low
+
+  * Update maintainer address
+
+ -- Alex Harpin <development@landsofshadow.co.uk>  Wed, 24 Dec 2014 07:32:25 +0000
+ 
 lldpd (0.6.0+vyos2+lithium1) unstable; urgency=low
 
   * New branch
