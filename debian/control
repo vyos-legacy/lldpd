@@ -2,13 +2,13 @@ Source: lldpd
 Section: net
 Priority: optional
 Maintainer: Vincent Bernat <bernat@debian.org>
-Build-Depends: debhelper (>= 5), cdbs, autotools-dev, libsnmp15-dev | libsnmp9-dev | libsnmp-dev, libxml2-dev
+Build-Depends: debhelper (>= 5), cdbs, autotools-dev, libsnmp15-dev | libsnmp9-dev | libsnmp-dev, libxml2-dev, libssl-dev
 Standards-Version: 3.8.4
 Homepage: https://trac.luffy.cx/lldpd/
 
 Package: lldpd
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, adduser
+Depends: ${shlibs:Depends}, ${misc:Depends}, adduser, libsnmp, libssl1.0.2 (>= 1.0.2d)
 Suggests: snmpd
 Description: implementation of IEEE 802.1ab (LLDP)
  LLDP is an industry standard protocol designed to supplant
