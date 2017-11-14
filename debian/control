@@ -8,7 +8,7 @@ Homepage: https://trac.luffy.cx/lldpd/
 
 Package: lldpd
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, adduser, libsnmp, libssl1.0.2 (>= 1.0.2d)
+Depends: ${shlibs:Depends}, ${misc:Depends}, adduser, libsnmp15, libssl1.0.2 (>= 1.0.2d)
 Suggests: snmpd
 Description: implementation of IEEE 802.1ab (LLDP)
  LLDP is an industry standard protocol designed to supplant
